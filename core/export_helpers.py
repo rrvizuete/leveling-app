@@ -62,6 +62,7 @@ def format_export_decisions_df(decision_df: pd.DataFrame) -> pd.DataFrame:
     if decision_df.empty:
         return decision_df
     work = decision_df.copy().rename(columns={
+        "Observation_ID": "Observation ID",
         "From_Point": "From Point",
         "To_Point": "To Point",
         "Leg_ID": "Leg ID",
@@ -72,9 +73,20 @@ def format_export_decisions_df(decision_df: pd.DataFrame) -> pd.DataFrame:
         "Decision": "Decision",
         "User_Excluded": "User Excluded",
     })
-    return work[
-        ["From Point", "To Point", "Leg ID", "Run ID", "Normalized Delta Z", "Reference Value (Median)", "Residual From Reference", "Decision", "User Excluded"]
+    columns = [
+        "From Point",
+        "To Point",
+        "Leg ID",
+        "Run ID",
+        "Normalized Delta Z",
+        "Reference Value (Median)",
+        "Residual From Reference",
+        "Decision",
+        "User Excluded",
     ]
+    if "Observation ID" in work.columns:
+        columns.insert(0, "Observation ID")
+    return work[columns]
 
 
 def format_export_cleaned_df(cleaned_df: pd.DataFrame) -> pd.DataFrame:
@@ -185,10 +197,60 @@ def format_export_sections_df(sections_df: pd.DataFrame) -> pd.DataFrame:
     ]
 
 
+def format_export_circuit_summary_df(circuit_summary_df: pd.DataFrame) -> pd.DataFrame:
+    if circuit_summary_df.empty:
+        return circuit_summary_df
+    work = circuit_summary_df.copy().rename(columns={
+        "Circuit_ID": "Circuit ID",
+        "Circuit_Type": "Circuit Type",
+        "Point_Count": "Point Count",
+        "Leg_Count": "Leg Count",
+        "Start_Point": "Start Point",
+        "End_Point": "End Point",
+        "Observed_Total_Delta_Z": "Observed Total Delta Z",
+        "Control_Delta_Z": "Control Delta Z",
+        "Closure_Error": "Closure Error",
+        "Correction_Per_Leg": "Correction Per Leg",
+        "Status": "Status",
+    })
+    return work[
+        ["Circuit ID", "Circuit Type", "Point Count", "Leg Count", "Start Point", "End Point", "Observed Total Delta Z", "Control Delta Z", "Closure Error", "Correction Per Leg", "Status"]
+    ]
+
+
+def format_export_circuit_legs_df(circuit_legs_df: pd.DataFrame) -> pd.DataFrame:
+    if circuit_legs_df.empty:
+        return circuit_legs_df
+    work = circuit_legs_df.copy().rename(columns={
+        "Circuit_ID": "Circuit ID",
+        "From_Point": "From Point",
+        "To_Point": "To Point",
+        "Leg_ID": "Leg ID",
+        "Observed_Delta_Z": "Observed Delta Z",
+        "Correction": "Proration Correction",
+        "Corrected_Delta_Z": "Corrected Delta Z",
+    })
+    return work[
+        ["Circuit ID", "From Point", "To Point", "Leg ID", "Observed Delta Z", "Proration Correction", "Corrected Delta Z"]
+    ]
+
+
+def format_export_circuit_elevations_df(circuit_elevations_df: pd.DataFrame) -> pd.DataFrame:
+    if circuit_elevations_df.empty:
+        return circuit_elevations_df
+    work = circuit_elevations_df.copy().rename(columns={
+        "Circuit_ID": "Circuit ID",
+        "Point_ID": "Point ID",
+        "Elevation": "Elevation",
+    })
+    return work[["Circuit ID", "Point ID", "Elevation"]]
+
+
 def export_analysis_workbook(
     raw_df, control_df, leg_df, summary_df, decision_df, cleaned_df,
     adjusted_points_df, observation_residuals_df, control_checks_df,
     connectivity_df, sections_df,
+    circuit_summary_df, circuit_legs_df, circuit_elevations_df,
 ):
     output = BytesIO()
 
@@ -203,6 +265,9 @@ def export_analysis_workbook(
     control_checks_export = format_export_control_checks_df(control_checks_df)
     connectivity_export = format_export_connectivity_df(connectivity_df)
     sections_export = format_export_sections_df(sections_df)
+    circuit_summary_export = format_export_circuit_summary_df(circuit_summary_df)
+    circuit_legs_export = format_export_circuit_legs_df(circuit_legs_df)
+    circuit_elevations_export = format_export_circuit_elevations_df(circuit_elevations_df)
 
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         if not raw_export.empty:
@@ -227,6 +292,12 @@ def export_analysis_workbook(
             observation_residuals_export.to_excel(writer, sheet_name="Observation Residuals", index=False)
         if not control_checks_export.empty:
             control_checks_export.to_excel(writer, sheet_name="Control Point Checks", index=False)
+        if not circuit_summary_export.empty:
+            circuit_summary_export.to_excel(writer, sheet_name="Circuit Summary", index=False)
+        if not circuit_legs_export.empty:
+            circuit_legs_export.to_excel(writer, sheet_name="Circuit Legs", index=False)
+        if not circuit_elevations_export.empty:
+            circuit_elevations_export.to_excel(writer, sheet_name="Circuit Elevations", index=False)
 
     output.seek(0)
     return output

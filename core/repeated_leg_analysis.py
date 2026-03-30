@@ -41,6 +41,10 @@ def analyze_repeated_legs(legs_df: pd.DataFrame, tolerance: float):
         for _, row in group.iterrows():
             diff = float(row["NormalizedDiff"])
             residual = abs(diff - reference_value)
+            observation_id = (
+                f"{row['RunID']}|{int(row['FromSeq'])}|{int(row['ToSeq'])}|"
+                f"{row['FromPoint']}|{row['ToPoint']}"
+            )
 
             if observation_count == 1:
                 decision = "Single Observation"
@@ -55,6 +59,7 @@ def analyze_repeated_legs(legs_df: pd.DataFrame, tolerance: float):
                     "Run_ID": row["RunID"],
                     "From_Point": row["FromPoint"],
                     "To_Point": row["ToPoint"],
+                    "Observation_ID": observation_id,
                     "Normalized_Delta_Z": round(diff, 4),
                     "Reference_Value": round(reference_value, 4),
                     "Residual_From_Reference": round(residual, 4),

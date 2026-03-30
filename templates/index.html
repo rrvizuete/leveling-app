@@ -243,7 +243,7 @@
                                 </thead>
                                 <tbody>
                                     {% for row in decision_data %}
-                                    {% set row_key = row.Leg_ID ~ '||' ~ row.Run_ID ~ '||' ~ row.From_Point ~ '||' ~ row.To_Point ~ '||' ~ ('%.4f'|format(row.Normalized_Delta_Z)) %}
+                                    {% set row_key = row.Observation_ID if row.Observation_ID else (row.Leg_ID ~ '||' ~ row.Run_ID ~ '||' ~ row.From_Point ~ '||' ~ row.To_Point ~ '||' ~ ('%.4f'|format(row.Normalized_Delta_Z))) %}
                                     <tr class="
                                         {% if row.Decision == 'Suspect' %}
                                             suspect-row

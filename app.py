@@ -63,6 +63,10 @@ def sort_cleaned_df(cleaned_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def make_decision_row_key(row) -> str:
+    observation_id = str(row.get("Observation_ID", "")).strip()
+    if observation_id:
+        return observation_id
+
     return (
         f"{row['Leg_ID']}||{row['Run_ID']}||{row['From_Point']}||"
         f"{row['To_Point']}||{float(row['Normalized_Delta_Z']):.4f}"
@@ -294,8 +298,26 @@ def index():
                         sections_df,
                         _adj_errors,
                         _adj_warnings,
-                    ) = run_network_pipeline(cleaned_df, control_df) if (not control_df.empty and not cleaned_df.empty) else (
-                        pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), [], []
+                    ) = (
+                        run_network_pipeline(cleaned_df, control_df)
+                        if (
+                            adjustment_mode == "network"
+                            and not control_df.empty
+                            and not cleaned_df.empty
+                        )
+                        else (pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), [], [])
+                    )
+
+                    (
+                        circuit_summary_df,
+                        circuit_legs_df,
+                        circuit_elevations_df,
+                        _circuit_errors,
+                        _circuit_warnings,
+                    ) = (
+                        run_circuit_pipeline(saved_circuits, control_df)
+                        if adjustment_mode == "circuit" and not control_df.empty
+                        else (pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), [], [])
                     )
 
                     workbook = export_analysis_workbook(
@@ -310,6 +332,9 @@ def index():
                         control_checks_df,
                         connectivity_df,
                         sections_df,
+                        circuit_summary_df,
+                        circuit_legs_df,
+                        circuit_elevations_df,
                     )
 
                     return send_file(
