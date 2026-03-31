@@ -153,7 +153,12 @@ button:hover {
 }
 
 .table-wrap {
+    max-height: 60vh;
+    overflow-y: auto;
     overflow-x: auto;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #ffffff;
 }
 
 table {
@@ -174,6 +179,9 @@ td {
 
 th {
     background: #eff6ff;
+    position: sticky;
+    top: 0;
+    z-index: 2;
 }
 
 .suspect-row {
