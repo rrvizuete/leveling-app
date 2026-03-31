@@ -205,6 +205,21 @@ def build_exclusion_state_file(selected_keys: set[str]):
     )
 
 
+def build_circuits_state_file(saved_circuits: list[dict]):
+    output = BytesIO()
+    payload = {
+        "saved_circuits": saved_circuits,
+    }
+    output.write(json.dumps(payload, indent=2).encode("utf-8"))
+    output.seek(0)
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name="saved_circuits.json",
+        mimetype="application/json",
+    )
+
+
 def parse_exclusion_state_file(uploaded_state_file):
     content = uploaded_state_file.read()
     if isinstance(content, bytes):
@@ -218,6 +233,21 @@ def parse_exclusion_state_file(uploaded_state_file):
         raise ValueError("State file field 'excluded_rows' must be a list.")
 
     return {str(value) for value in excluded_rows}
+
+
+def parse_saved_circuits_file(uploaded_state_file):
+    content = uploaded_state_file.read()
+    if isinstance(content, bytes):
+        content = content.decode("utf-8")
+    payload = json.loads(content)
+    if not isinstance(payload, dict):
+        raise ValueError("Circuits file is not a JSON object.")
+
+    saved_circuits = payload.get("saved_circuits", [])
+    if not isinstance(saved_circuits, list):
+        raise ValueError("Circuits file field 'saved_circuits' must be a list.")
+
+    return saved_circuits
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -294,6 +324,7 @@ def index():
 
         uploaded_file = request.files.get("excel_file")
         uploaded_state_file = request.files.get("exclusion_state_file")
+        uploaded_circuits_file = request.files.get("circuits_state_file")
 
         raw_json = request.form.get("raw_json", "")
         control_json = request.form.get("control_json", "")
@@ -446,6 +477,54 @@ def index():
                     success_message = "Fixed points updated successfully."
 
                 active_stage = "adjustment"
+
+            elif action == "download_circuits_state":
+                return build_circuits_state_file(saved_circuits)
+
+            elif action == "apply_uploaded_circuits":
+                raw_df = parse_json_df(raw_json)
+                control_df = parse_json_df(control_json)
+                leg_df = parse_json_df(leg_json)
+                summary_df = parse_json_df(summary_json)
+                decision_df = parse_json_df(decision_json)
+                cleaned_df = parse_json_df(cleaned_json)
+
+                raw_data = raw_df.to_dict(orient="records")
+                control_data = control_df.to_dict(orient="records")
+                leg_data = leg_df.to_dict(orient="records")
+                summary_data = summary_df.to_dict(orient="records")
+                decision_data = decision_df.to_dict(orient="records")
+                cleaned_data = cleaned_df.to_dict(orient="records")
+
+                graph, _usable_cleaned = build_graph_from_cleaned_legs(cleaned_df)
+                available_start_points = get_all_available_points(graph)
+
+                if not uploaded_circuits_file or uploaded_circuits_file.filename == "":
+                    current_circuit_message = "Please select a circuits JSON file."
+                else:
+                    saved_circuits = parse_saved_circuits_file(uploaded_circuits_file)
+                    current_circuit_path = []
+                    current_circuit_candidates = []
+                    current_circuit_type = ""
+                    current_circuit_message = "Circuits imported successfully."
+
+                (
+                    circuit_summary_df,
+                    circuit_legs_df,
+                    circuit_elevations_df,
+                    circuit_errors,
+                    circuit_warnings,
+                ) = run_circuit_pipeline(saved_circuits, control_df)
+
+                adjustment_messages.extend(circuit_errors)
+                adjustment_messages.extend(circuit_warnings)
+
+                circuit_summary_data = circuit_summary_df.to_dict(orient="records")
+                circuit_legs_data = circuit_legs_df.to_dict(orient="records")
+                circuit_elevations_data = circuit_elevations_df.to_dict(orient="records")
+
+                active_stage = "adjustment"
+                active_adjustment_tab = "builder"
 
             elif action == "start_circuit":
                 raw_df = parse_json_df(raw_json)
