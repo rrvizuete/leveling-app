@@ -190,6 +190,36 @@ def run_circuit_pipeline(saved_circuits, control_df):
     return compute_circuit_adjustment(saved_circuits, control_df)
 
 
+def build_exclusion_state_file(selected_keys: set[str]):
+    output = BytesIO()
+    payload = {
+        "excluded_rows": sorted(selected_keys),
+    }
+    output.write(json.dumps(payload, indent=2).encode("utf-8"))
+    output.seek(0)
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name="exclusion_state.json",
+        mimetype="application/json",
+    )
+
+
+def parse_exclusion_state_file(uploaded_state_file):
+    content = uploaded_state_file.read()
+    if isinstance(content, bytes):
+        content = content.decode("utf-8")
+    payload = json.loads(content)
+    if not isinstance(payload, dict):
+        raise ValueError("State file is not a JSON object.")
+
+    excluded_rows = payload.get("excluded_rows", [])
+    if not isinstance(excluded_rows, list):
+        raise ValueError("State file field 'excluded_rows' must be a list.")
+
+    return {str(value) for value in excluded_rows}
+
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     raw_data = None
@@ -245,6 +275,10 @@ def index():
                 filename="control_points_template.xlsx",
             )
 
+        if action == "download_exclusion_state":
+            selected_keys = set(request.form.getlist("exclude_row"))
+            return build_exclusion_state_file(selected_keys)
+
         active_stage = request.form.get("active_stage", "review")
         active_tab = request.form.get("active_tab", "raw")
         active_adjustment_tab = request.form.get("active_adjustment_tab", "connectivity")
@@ -259,6 +293,7 @@ def index():
             errors.append("Tolerance must be a numeric value.")
 
         uploaded_file = request.files.get("excel_file")
+        uploaded_state_file = request.files.get("exclusion_state_file")
 
         raw_json = request.form.get("raw_json", "")
         control_json = request.form.get("control_json", "")
@@ -742,6 +777,83 @@ def index():
                             current_circuit_type = classify_circuit_path(current_circuit_path, fixed_points) if len(current_circuit_path) >= 2 else ""
 
                     success_message = "Exclusions applied successfully."
+                    active_stage = "review"
+                    active_tab = "decisions"
+
+            elif action == "apply_uploaded_exclusions":
+                if not raw_json or not leg_json or not decision_json:
+                    errors.append("No analysis data found to apply uploaded exclusions.")
+                elif not uploaded_state_file or uploaded_state_file.filename == "":
+                    errors.append("Please select an exclusion state JSON file.")
+                elif not errors:
+                    raw_df = parse_json_df(raw_json)
+                    control_df = parse_json_df(control_json)
+                    leg_df = parse_json_df(leg_json)
+                    decision_df = parse_json_df(decision_json)
+
+                    selected_keys = parse_exclusion_state_file(uploaded_state_file)
+
+                    summary_df, updated_decision_df = recompute_after_exclusions(
+                        decision_df, tolerance, selected_keys
+                    )
+                    cleaned_df = build_cleaned_leg_means(updated_decision_df, tolerance)
+                    cleaned_df = sort_cleaned_df(cleaned_df)
+
+                    raw_data = raw_df.to_dict(orient="records")
+                    control_data = control_df.to_dict(orient="records")
+                    leg_data = leg_df.to_dict(orient="records")
+                    summary_data = summary_df.to_dict(orient="records")
+                    decision_data = updated_decision_df.to_dict(orient="records")
+                    cleaned_data = cleaned_df.to_dict(orient="records")
+
+                    if not control_df.empty:
+                        if adjustment_mode == "network":
+                            (
+                                adjusted_points_df,
+                                observation_residuals_df,
+                                control_checks_df,
+                                connectivity_df,
+                                sections_df,
+                                adj_errors,
+                                adj_warnings,
+                            ) = run_network_pipeline(cleaned_df, control_df)
+
+                            adjustment_messages.extend(adj_errors)
+                            adjustment_messages.extend(adj_warnings)
+
+                            adjusted_points_data = adjusted_points_df.to_dict(orient="records")
+                            observation_residuals_data = observation_residuals_df.to_dict(orient="records")
+                            control_checks_data = control_checks_df.to_dict(orient="records")
+                            connectivity_data = connectivity_df.to_dict(orient="records")
+                            sections_data = sections_df.to_dict(orient="records")
+                        else:
+                            (
+                                circuit_summary_df,
+                                circuit_legs_df,
+                                circuit_elevations_df,
+                                circuit_errors,
+                                circuit_warnings,
+                            ) = run_circuit_pipeline(saved_circuits, control_df)
+
+                            adjustment_messages.extend(circuit_errors)
+                            adjustment_messages.extend(circuit_warnings)
+
+                            circuit_summary_data = circuit_summary_df.to_dict(orient="records")
+                            circuit_legs_data = circuit_legs_df.to_dict(orient="records")
+                            circuit_elevations_data = circuit_elevations_df.to_dict(orient="records")
+
+                            graph, _usable_cleaned = build_graph_from_cleaned_legs(cleaned_df)
+                            available_start_points = get_all_available_points(graph)
+                            fixed_points = set(
+                                control_df.loc[
+                                    control_df["Fixed"].astype(str).str.upper() == "Y",
+                                    "PointID"
+                                ].astype(str).tolist()
+                            )
+                            current_circuit_candidates = get_next_candidate_points(graph, current_circuit_path)
+                            current_circuit_type = classify_circuit_path(current_circuit_path, fixed_points) if len(current_circuit_path) >= 2 else ""
+
+                    success_message = "Uploaded exclusion state applied successfully."
                     active_stage = "review"
                     active_tab = "decisions"
 
