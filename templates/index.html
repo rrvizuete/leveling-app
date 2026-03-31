@@ -840,6 +840,45 @@
                                     <button type="submit">Save Circuit</button>
                                 </form>
                             </div>
+
+                            <div class="download-actions" style="margin-top: 16px;">
+                                <form method="POST">
+                                    <input type="hidden" name="action" value="download_circuits_state">
+                                    <input type="hidden" name="active_stage" value="adjustment">
+                                    <input type="hidden" name="active_tab" value="{{ active_tab }}">
+                                    <input type="hidden" name="active_adjustment_tab" value="builder">
+                                    <input type="hidden" name="adjustment_mode" value="{{ adjustment_mode }}">
+                                    <input type="hidden" name="saved_circuits_json" value='{{ saved_circuits_json|safe }}'>
+                                    <input type="hidden" name="current_circuit_path_json" value='{{ current_circuit_path|tojson|safe }}'>
+                                    <input type="hidden" name="tolerance" value="{{ tolerance }}">
+                                    <input type="hidden" name="raw_json" value='{{ raw_data|tojson|safe }}'>
+                                    <input type="hidden" name="control_json" value='{{ control_data|tojson|safe }}'>
+                                    <input type="hidden" name="leg_json" value='{{ leg_data|tojson|safe }}'>
+                                    <input type="hidden" name="summary_json" value='{{ summary_data|tojson|safe }}'>
+                                    <input type="hidden" name="decision_json" value='{{ decision_data|tojson|safe }}'>
+                                    <input type="hidden" name="cleaned_json" value='{{ cleaned_data|tojson|safe }}'>
+                                    <button type="submit">Export Circuits JSON</button>
+                                </form>
+
+                                <form method="POST" enctype="multipart/form-data">
+                                    <input type="hidden" name="action" value="apply_uploaded_circuits">
+                                    <input type="hidden" name="active_stage" value="adjustment">
+                                    <input type="hidden" name="active_tab" value="{{ active_tab }}">
+                                    <input type="hidden" name="active_adjustment_tab" value="builder">
+                                    <input type="hidden" name="adjustment_mode" value="{{ adjustment_mode }}">
+                                    <input type="hidden" name="saved_circuits_json" value='{{ saved_circuits_json|safe }}'>
+                                    <input type="hidden" name="current_circuit_path_json" value='{{ current_circuit_path|tojson|safe }}'>
+                                    <input type="hidden" name="tolerance" value="{{ tolerance }}">
+                                    <input type="hidden" name="raw_json" value='{{ raw_data|tojson|safe }}'>
+                                    <input type="hidden" name="control_json" value='{{ control_data|tojson|safe }}'>
+                                    <input type="hidden" name="leg_json" value='{{ leg_data|tojson|safe }}'>
+                                    <input type="hidden" name="summary_json" value='{{ summary_data|tojson|safe }}'>
+                                    <input type="hidden" name="decision_json" value='{{ decision_data|tojson|safe }}'>
+                                    <input type="hidden" name="cleaned_json" value='{{ cleaned_data|tojson|safe }}'>
+                                    <input type="file" name="circuits_state_file" accept=".json" required>
+                                    <button type="submit">Import Circuits JSON</button>
+                                </form>
+                            </div>
                         </div>
                     </div>
                 </div>
