@@ -291,6 +291,51 @@
                             <button type="submit">Apply Exclusions</button>
                         </div>
                     </form>
+
+                    <div class="download-actions">
+                        <form method="POST">
+                            <input type="hidden" name="action" value="download_exclusion_state">
+                            <input type="hidden" name="active_stage" value="review">
+                            <input type="hidden" name="active_tab" value="decisions">
+                            <input type="hidden" name="active_adjustment_tab" value="{{ active_adjustment_tab }}">
+                            <input type="hidden" name="adjustment_mode" value="{{ adjustment_mode }}">
+                            <input type="hidden" name="saved_circuits_json" value='{{ saved_circuits_json|safe }}'>
+                            <input type="hidden" name="current_circuit_path_json" value='{{ current_circuit_path|tojson|safe }}'>
+                            <input type="hidden" name="tolerance" value="{{ tolerance }}">
+                            <input type="hidden" name="raw_json" value='{{ raw_data|tojson|safe }}'>
+                            <input type="hidden" name="control_json" value='{{ control_data|tojson|safe }}'>
+                            <input type="hidden" name="leg_json" value='{{ leg_data|tojson|safe }}'>
+                            <input type="hidden" name="summary_json" value='{{ summary_data|tojson|safe }}'>
+                            <input type="hidden" name="decision_json" value='{{ decision_data|tojson|safe }}'>
+                            <input type="hidden" name="cleaned_json" value='{{ cleaned_data|tojson|safe }}'>
+                            {% for row in decision_data %}
+                            {% set row_key = row.Leg_ID ~ '||' ~ row.Run_ID ~ '||' ~ row.From_Point ~ '||' ~ row.To_Point ~ '||' ~ ('%.4f'|format(row.Normalized_Delta_Z)) %}
+                            {% if row.User_Excluded %}
+                            <input type="hidden" name="exclude_row" value="{{ row_key }}">
+                            {% endif %}
+                            {% endfor %}
+                            <button type="submit">Download Exclusion State</button>
+                        </form>
+
+                        <form method="POST" enctype="multipart/form-data">
+                            <input type="hidden" name="action" value="apply_uploaded_exclusions">
+                            <input type="hidden" name="active_stage" value="review">
+                            <input type="hidden" name="active_tab" value="decisions">
+                            <input type="hidden" name="active_adjustment_tab" value="{{ active_adjustment_tab }}">
+                            <input type="hidden" name="adjustment_mode" value="{{ adjustment_mode }}">
+                            <input type="hidden" name="saved_circuits_json" value='{{ saved_circuits_json|safe }}'>
+                            <input type="hidden" name="current_circuit_path_json" value='{{ current_circuit_path|tojson|safe }}'>
+                            <input type="hidden" name="tolerance" value="{{ tolerance }}">
+                            <input type="hidden" name="raw_json" value='{{ raw_data|tojson|safe }}'>
+                            <input type="hidden" name="control_json" value='{{ control_data|tojson|safe }}'>
+                            <input type="hidden" name="leg_json" value='{{ leg_data|tojson|safe }}'>
+                            <input type="hidden" name="summary_json" value='{{ summary_data|tojson|safe }}'>
+                            <input type="hidden" name="decision_json" value='{{ decision_data|tojson|safe }}'>
+                            <input type="hidden" name="cleaned_json" value='{{ cleaned_data|tojson|safe }}'>
+                            <input type="file" name="exclusion_state_file" accept=".json" required>
+                            <button type="submit">Upload Exclusion State</button>
+                        </form>
+                    </div>
                 </div>
             </div>
 
