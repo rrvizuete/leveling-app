@@ -66,9 +66,20 @@
         <div id="help-modal" class="modal-overlay">
             <div class="modal-card">
                 <h3>Input Templates & Least Squares Method</h3>
-                <p><strong>Field_Elevations sheet:</strong> RunID, Sequence, PointID, Raw_Elevation.</p>
-                <p><strong>Control_Points sheet:</strong> PointID, Elevation, Fixed (Y or N).</p>
-                <p class="help-text">The app computes leg differences, combines repeated observations, then solves a weighted least-squares system where fixed points anchor elevations and residuals are minimized.</p>
+                <p><strong>Field_Elevations sheet columns:</strong> <code>RunID</code>, <code>Sequence</code>, <code>PointID</code>, <code>Raw_Elevation</code>.</p>
+                <ul>
+                    <li><strong>RunID:</strong> groups readings from the same leveling run.</li>
+                    <li><strong>Sequence:</strong> the order each point was observed inside a run (1, 2, 3, ...). Legs are built between consecutive sequence values within the same RunID.</li>
+                    <li><strong>PointID:</strong> point/station name.</li>
+                    <li><strong>Raw_Elevation:</strong> observed elevation value for that sequence record.</li>
+                </ul>
+                <p><strong>Control_Points sheet columns:</strong> <code>PointID</code>, <code>Elevation</code>, <code>Fixed</code> (Y or N).</p>
+                <p class="help-text"><strong>Empty rows:</strong> allowed only as fully blank separator rows. Partially filled rows are treated as invalid input and should be completed or removed.</p>
+                <hr>
+                <p><strong>Least-squares formulation used in this app:</strong></p>
+                <p class="help-text">For each leg observation from point <em>i</em> to point <em>j</em>, the observation equation is built as:<br><code>Hj - Hi = ΔZobs + v</code><br>where <code>Hi</code>/<code>Hj</code> are unknown adjusted elevations (or known control if fixed), <code>ΔZobs</code> is the cleaned observed delta-Z, and <code>v</code> is the residual.</p>
+                <p class="help-text">All equations are assembled in matrix form <code>A·x - l = v</code>, with diagonal weights from observation precision (<code>w = 1/σ²</code> when σ is available, otherwise 1.0). The solver computes <code>x</code> using normal equations:<br><code>(AᵀPA)x = AᵀPl</code>.</p>
+                <p class="help-text">Residuals are then <code>v = A·x - l</code>, and the solution is the one that minimizes the weighted sum of squared residuals:<br><code>vᵀPv</code>. This gives statistically consistent adjustments while honoring fixed control constraints.</p>
                 <button type="button" onclick="closeHelpModal()">Close</button>
             </div>
         </div>
