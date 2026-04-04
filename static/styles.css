@@ -221,3 +221,15 @@ th {
 .inline-message ul {
     margin: 8px 0 0 18px;
 }
+
+.circuit-builder-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1.1fr;
+    gap: 20px;
+}
+
+@media (max-width: 1200px) {
+    .circuit-builder-layout {
+        grid-template-columns: 1fr;
+    }
+}
