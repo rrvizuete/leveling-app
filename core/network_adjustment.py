@@ -278,6 +278,10 @@ def run_component_adjustment(component_points, component_cleaned_df, fixed_point
             }
         )
 
+    max_weight = max(weights) if weights else 1.0
+    if max_weight <= 0:
+        max_weight = 1.0
+
     for point, elev in fixed_points_in_component.items():
         adjusted_elevations[point] = elev
         point_sigmas[point] = 0.0
@@ -295,6 +299,7 @@ def run_component_adjustment(component_points, component_cleaned_df, fixed_point
                     "Adjusted_Delta_Z": round(adjusted_dz, 4),
                     "Residual": round(residual, 4),
                     "Weight": round(row["Weight"], 6),
+                    "Normalized_Weight": round(row["Weight"] / max_weight, 6),
                     "Used_In_Adjustment": "Y",
                 }
             )
@@ -342,6 +347,7 @@ def run_component_adjustment(component_points, component_cleaned_df, fixed_point
                 "Adjusted_Delta_Z": round(adjusted_dz, 4),
                 "Residual": round(float(v_flat[idx]), 4),
                 "Weight": round(row["Weight"], 6),
+                "Normalized_Weight": round(row["Weight"] / max_weight, 6),
                 "Used_In_Adjustment": "Y",
             }
         )
@@ -591,6 +597,7 @@ def run_network_adjustment(cleaned_df: pd.DataFrame, control_df: pd.DataFrame):
                     "Adjusted_Delta_Z": "",
                     "Residual": "",
                     "Weight": "",
+                    "Normalized_Weight": "",
                     "Used_In_Adjustment": "N",
                 }
             )
