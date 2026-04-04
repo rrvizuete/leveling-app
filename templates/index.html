@@ -4,18 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Leveling Adjustment App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
     <div class="container">
         <header class="page-header">
+            <p class="eyebrow">Survey Adjustment Suite</p>
             <h1>Leveling Adjustment App</h1>
-            <p>Version 1.4 — Circuit Builder (Phase 3)</p>
+            <p class="subtitle">Version 1.4 — Circuit Builder (Phase 3)</p>
         </header>
 
         <section class="card">
-            <h2>Upload Data</h2>
-            <button type="button" onclick="openHelpModal()" style="margin-bottom: 12px;">Input File & Method Help</button>
+            <div class="card-heading-row">
+                <h2>Upload Data</h2>
+                <button type="button" class="secondary-button" onclick="openHelpModal()">Input File & Method Help</button>
+            </div>
             <form method="POST" enctype="multipart/form-data">
                 <input type="hidden" name="action" value="process">
                 <input type="hidden" name="active_stage" class="active-stage-input" value="{{ active_stage }}">
@@ -430,7 +434,7 @@
                 </div>
                 {% endif %}
 
-                <div class="form-group" style="max-width: 320px; margin-bottom: 16px;">
+                <div class="form-group mode-selector-wrap">
                     <label for="adjustment_mode_display">Adjustment Mode</label>
                     <form method="POST">
                         <input type="hidden" name="action" value="process">
