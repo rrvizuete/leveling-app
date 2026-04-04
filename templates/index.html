@@ -698,7 +698,7 @@
                     <p><strong>{{ current_circuit_message }}</strong></p>
                     {% endif %}
 
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div class="circuit-builder-layout">
                         <div>
                             <h4>Start New Circuit</h4>
                             <form method="POST">
@@ -878,6 +878,29 @@
                                     <input type="file" name="circuits_state_file" accept=".json" required>
                                     <button type="submit">Import Circuits JSON</button>
                                 </form>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4>Points Not Included in Circuits</h4>
+                            <p class="help-text">Updates while building and only shows points not in the current path or any saved circuit.</p>
+
+                            <h5>Available Points</h5>
+                            <div class="table-wrap">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Point ID</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for point in unassigned_points.not_in_any %}
+                                        <tr><td>{{ point }}</td></tr>
+                                        {% else %}
+                                        <tr><td>No points are fully unused.</td></tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>

@@ -165,6 +165,25 @@ def parse_saved_circuits(json_text: str):
     return json.loads(json_text)
 
 
+def build_unassigned_points(
+    all_points: list[str], current_circuit_path: list[str], saved_circuits: list[dict]
+):
+    current_points = {str(point) for point in current_circuit_path}
+    saved_points = {
+        str(point)
+        for circuit in saved_circuits
+        for point in circuit.get("Path", [])
+    }
+
+    return {
+        "not_in_current": [point for point in all_points if point not in current_points],
+        "not_in_saved": [point for point in all_points if point not in saved_points],
+        "not_in_any": [
+            point for point in all_points if point not in current_points and point not in saved_points
+        ],
+    }
+
+
 def build_template_workbook(sheet_name: str, columns: list[str], filename: str):
     output = BytesIO()
     df = pd.DataFrame(columns=columns)
@@ -275,6 +294,7 @@ def index():
     current_circuit_type = ""
     current_circuit_message = ""
     saved_circuits = []
+    unassigned_points = {"not_in_current": [], "not_in_saved": [], "not_in_any": []}
 
     errors = []
     warnings = []
@@ -1055,6 +1075,9 @@ def index():
         current_circuit_message=current_circuit_message,
         saved_circuits=saved_circuits,
         saved_circuits_json=json.dumps(saved_circuits),
+        unassigned_points=build_unassigned_points(
+            available_start_points, current_circuit_path, saved_circuits
+        ),
         tolerance=tolerance,
         errors=errors,
         warnings=warnings,
