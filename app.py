@@ -165,6 +165,12 @@ def parse_saved_circuits(json_text: str):
     return json.loads(json_text)
 
 
+def renumber_saved_circuits(saved_circuits: list[dict]) -> list[dict]:
+    for idx, circuit in enumerate(saved_circuits, start=1):
+        circuit["Circuit_ID"] = f"CIR-{idx}"
+    return saved_circuits
+
+
 def build_unassigned_points(
     all_points: list[str], current_circuit_path: list[str], saved_circuits: list[dict]
 ):
@@ -302,6 +308,7 @@ def index():
     success_message = None
 
     tolerance = 0.005
+    residual_threshold = 0.005
 
     active_stage = "review"
     active_tab = "raw"
@@ -341,6 +348,14 @@ def index():
                 errors.append("Tolerance must be greater than zero.")
         except ValueError:
             errors.append("Tolerance must be a numeric value.")
+
+        residual_threshold_raw = request.form.get("residual_threshold", "0.005")
+        try:
+            residual_threshold = float(residual_threshold_raw)
+            if residual_threshold < 0:
+                errors.append("Residual threshold must be zero or greater.")
+        except ValueError:
+            errors.append("Residual threshold must be a numeric value.")
 
         uploaded_file = request.files.get("excel_file")
         uploaded_state_file = request.files.get("exclusion_state_file")
@@ -806,6 +821,54 @@ def index():
                 active_stage = "adjustment"
                 active_adjustment_tab = "builder"
 
+            elif action == "delete_selected_circuits":
+                raw_df = parse_json_df(raw_json)
+                control_df = parse_json_df(control_json)
+                leg_df = parse_json_df(leg_json)
+                summary_df = parse_json_df(summary_json)
+                decision_df = parse_json_df(decision_json)
+                cleaned_df = parse_json_df(cleaned_json)
+
+                raw_data = raw_df.to_dict(orient="records")
+                control_data = control_df.to_dict(orient="records")
+                leg_data = leg_df.to_dict(orient="records")
+                summary_data = summary_df.to_dict(orient="records")
+                decision_data = decision_df.to_dict(orient="records")
+                cleaned_data = cleaned_df.to_dict(orient="records")
+
+                selected_circuit_ids = set(request.form.getlist("delete_circuit_id"))
+                if selected_circuit_ids:
+                    saved_circuits = [
+                        circuit for circuit in saved_circuits
+                        if circuit.get("Circuit_ID") not in selected_circuit_ids
+                    ]
+                    saved_circuits = renumber_saved_circuits(saved_circuits)
+                    current_circuit_message = "Selected circuits deleted."
+                else:
+                    current_circuit_message = "No circuits were selected for deletion."
+
+                graph, _usable_cleaned = build_graph_from_cleaned_legs(cleaned_df)
+                available_start_points = get_all_available_points(graph)
+                current_circuit_candidates = get_next_candidate_points(graph, current_circuit_path)
+
+                (
+                    circuit_summary_df,
+                    circuit_legs_df,
+                    circuit_elevations_df,
+                    circuit_errors,
+                    circuit_warnings,
+                ) = run_circuit_pipeline(saved_circuits, control_df)
+
+                adjustment_messages.extend(circuit_errors)
+                adjustment_messages.extend(circuit_warnings)
+
+                circuit_summary_data = circuit_summary_df.to_dict(orient="records")
+                circuit_legs_data = circuit_legs_df.to_dict(orient="records")
+                circuit_elevations_data = circuit_elevations_df.to_dict(orient="records")
+
+                active_stage = "adjustment"
+                active_adjustment_tab = "circuit_summary"
+
             elif action == "apply_exclusions":
                 if not raw_json or not leg_json or not decision_json:
                     errors.append("No analysis data found to apply exclusions.")
@@ -1079,6 +1142,7 @@ def index():
             available_start_points, current_circuit_path, saved_circuits
         ),
         tolerance=tolerance,
+        residual_threshold=residual_threshold,
         errors=errors,
         warnings=warnings,
         adjustment_messages=adjustment_messages,

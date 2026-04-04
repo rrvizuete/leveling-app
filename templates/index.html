@@ -15,6 +15,7 @@
 
         <section class="card">
             <h2>Upload Data</h2>
+            <button type="button" onclick="openHelpModal()" style="margin-bottom: 12px;">Input File & Method Help</button>
             <form method="POST" enctype="multipart/form-data">
                 <input type="hidden" name="action" value="process">
                 <input type="hidden" name="active_stage" class="active-stage-input" value="{{ active_stage }}">
@@ -61,6 +62,16 @@
                 </form>
             </div>
         </section>
+
+        <div id="help-modal" class="modal-overlay">
+            <div class="modal-card">
+                <h3>Input Templates & Least Squares Method</h3>
+                <p><strong>Field_Elevations sheet:</strong> RunID, Sequence, PointID, Raw_Elevation.</p>
+                <p><strong>Control_Points sheet:</strong> PointID, Elevation, Fixed (Y or N).</p>
+                <p class="help-text">The app computes leg differences, combines repeated observations, then solves a weighted least-squares system where fixed points anchor elevations and residuals are minimized.</p>
+                <button type="button" onclick="closeHelpModal()">Close</button>
+            </div>
+        </div>
 
         {% if errors %}
         <section class="card error-card">
@@ -618,6 +629,10 @@
 
                 <div id="adjustment-tab-residuals" class="tab-panel {% if active_adjustment_tab == 'residuals' %}active{% endif %}">
                     <h3>Observation Residuals</h3>
+                    <div class="form-group" style="max-width: 280px; margin-bottom: 14px;">
+                        <label for="residual-threshold-input">Residual Flag Threshold (ft)</label>
+                        <input id="residual-threshold-input" type="number" step="0.0001" min="0" value="{{ '%.4f'|format(residual_threshold) }}">
+                    </div>
                     {% if observation_residuals_data %}
                     <div class="table-wrap">
                         <table>
@@ -630,19 +645,21 @@
                                     <th>Adjusted Delta Z</th>
                                     <th>Residual</th>
                                     <th>Weight</th>
+                                    <th>Normalized Weight</th>
                                     <th>Used In Adjustment</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for row in observation_residuals_data %}
-                                <tr class="{% if row.Used_In_Adjustment == 'N' %}excluded-row{% endif %}">
+                                <tr class="{% if row.Used_In_Adjustment == 'N' %}excluded-row{% endif %}" data-residual="{{ row.Residual if row.Residual != '' else '' }}">
                                     <td>{{ row.From_Point }}</td>
                                     <td>{{ row.To_Point }}</td>
                                     <td>{{ row.Leg_ID }}</td>
                                     <td>{% if row.Final_Normalized_Delta_Z == "" %}—{% else %}{{ "%.4f"|format(row.Final_Normalized_Delta_Z) }}{% endif %}</td>
                                     <td>{% if row.Adjusted_Delta_Z == "" %}—{% else %}{{ "%.4f"|format(row.Adjusted_Delta_Z) }}{% endif %}</td>
                                     <td>{% if row.Residual == "" %}—{% else %}{{ "%.4f"|format(row.Residual) }}{% endif %}</td>
-                                    <td>{% if row.Weight == "" %}—{% else %}{{ row.Weight }}{% endif %}</td>
+                                    <td>{% if row.Weight == "" %}—{% else %}{{ "{:.6g}".format(row.Weight) }}{% endif %}</td>
+                                    <td>{% if row.Normalized_Weight == "" %}—{% else %}{{ "%.4f"|format(row.Normalized_Weight) }}{% endif %}</td>
                                     <td>{{ row.Used_In_Adjustment }}</td>
                                 </tr>
                                 {% endfor %}
@@ -909,10 +926,27 @@
                 <div id="adjustment-tab-circuit_summary" class="tab-panel {% if active_adjustment_tab == 'circuit_summary' %}active{% endif %}">
                     <h3>Circuit Summary</h3>
                     {% if circuit_summary_data %}
+                    <form method="POST">
+                        <input type="hidden" name="action" value="delete_selected_circuits">
+                        <input type="hidden" name="active_stage" value="adjustment">
+                        <input type="hidden" name="active_tab" value="{{ active_tab }}">
+                        <input type="hidden" name="active_adjustment_tab" value="circuit_summary">
+                        <input type="hidden" name="adjustment_mode" value="{{ adjustment_mode }}">
+                        <input type="hidden" name="saved_circuits_json" value='{{ saved_circuits_json|safe }}'>
+                        <input type="hidden" name="current_circuit_path_json" value='{{ current_circuit_path|tojson|safe }}'>
+                        <input type="hidden" name="tolerance" value="{{ tolerance }}">
+                        <input type="hidden" name="residual_threshold" value="{{ residual_threshold }}">
+                        <input type="hidden" name="raw_json" value='{{ raw_data|tojson|safe }}'>
+                        <input type="hidden" name="control_json" value='{{ control_data|tojson|safe }}'>
+                        <input type="hidden" name="leg_json" value='{{ leg_data|tojson|safe }}'>
+                        <input type="hidden" name="summary_json" value='{{ summary_data|tojson|safe }}'>
+                        <input type="hidden" name="decision_json" value='{{ decision_data|tojson|safe }}'>
+                        <input type="hidden" name="cleaned_json" value='{{ cleaned_data|tojson|safe }}'>
                     <div class="table-wrap">
                         <table>
                             <thead>
                                 <tr>
+                                    <th>Delete</th>
                                     <th>Circuit ID</th>
                                     <th>Circuit Type</th>
                                     <th>Point Count</th>
@@ -935,22 +969,27 @@
                                         excluded-row
                                     {% endif %}
                                 ">
+                                    <td><input type="checkbox" name="delete_circuit_id" value="{{ row.Circuit_ID }}"></td>
                                     <td>{{ row.Circuit_ID }}</td>
                                     <td>{{ row.Circuit_Type }}</td>
                                     <td>{{ row.Point_Count }}</td>
                                     <td>{{ row.Leg_Count }}</td>
                                     <td>{{ row.Start_Point }}</td>
                                     <td>{{ row.End_Point }}</td>
-                                    <td>{% if row.Observed_Total_Delta_Z == "" %}—{% else %}{{ row.Observed_Total_Delta_Z }}{% endif %}</td>
-                                    <td>{% if row.Control_Delta_Z == "" %}—{% else %}{{ row.Control_Delta_Z }}{% endif %}</td>
-                                    <td>{% if row.Closure_Error == "" %}—{% else %}{{ row.Closure_Error }}{% endif %}</td>
-                                    <td>{% if row.Correction_Per_Leg == "" %}—{% else %}{{ row.Correction_Per_Leg }}{% endif %}</td>
+                                    <td>{% if row.Observed_Total_Delta_Z == "" %}—{% else %}{{ "%.4f"|format(row.Observed_Total_Delta_Z) }}{% endif %}</td>
+                                    <td>{% if row.Control_Delta_Z == "" %}—{% else %}{{ "%.4f"|format(row.Control_Delta_Z) }}{% endif %}</td>
+                                    <td>{% if row.Closure_Error == "" %}—{% else %}{{ "%.4f"|format(row.Closure_Error) }}{% endif %}</td>
+                                    <td>{% if row.Correction_Per_Leg == "" %}—{% else %}{{ "%.4f"|format(row.Correction_Per_Leg) }}{% endif %}</td>
                                     <td>{{ row.Status }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
                     </div>
+                    <div class="actions">
+                        <button type="submit">Delete Selected Circuits</button>
+                    </div>
+                    </form>
                     {% else %}
                     <p>No saved circuits yet.</p>
                     {% endif %}
@@ -979,9 +1018,9 @@
                                     <td>{{ row.From_Point }}</td>
                                     <td>{{ row.To_Point }}</td>
                                     <td>{{ row.Leg_ID }}</td>
-                                    <td>{{ row.Observed_Delta_Z }}</td>
-                                    <td>{% if row.Correction == "" %}—{% else %}{{ row.Correction }}{% endif %}</td>
-                                    <td>{{ row.Corrected_Delta_Z }}</td>
+                                    <td>{{ "%.4f"|format(row.Observed_Delta_Z) }}</td>
+                                    <td>{% if row.Correction == "" %}—{% else %}{{ "%.4f"|format(row.Correction) }}{% endif %}</td>
+                                    <td>{{ "%.4f"|format(row.Corrected_Delta_Z) }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -1009,7 +1048,7 @@
                                 <tr>
                                     <td>{{ row.Circuit_ID }}</td>
                                     <td>{{ row.Point_ID }}</td>
-                                    <td>{{ row.Elevation }}</td>
+                                    <td>{{ "%.4f"|format(row.Elevation) }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -1152,7 +1191,45 @@
             if (clickedButton) {
                 clickedButton.classList.add('active');
             }
+
+            if (tabName === 'residuals') {
+                applyResidualFlags();
+            }
         }
+
+        function applyResidualFlags() {
+            const thresholdInput = document.getElementById('residual-threshold-input');
+            if (!thresholdInput) return;
+            const threshold = Math.abs(parseFloat(thresholdInput.value || '0'));
+
+            document
+                .querySelectorAll('#adjustment-tab-residuals tbody tr[data-residual]')
+                .forEach(row => {
+                    row.classList.remove('flagged-residual-row');
+                    const residualRaw = row.getAttribute('data-residual');
+                    if (residualRaw === '') return;
+                    const residual = Math.abs(parseFloat(residualRaw));
+                    if (!Number.isNaN(residual) && residual > threshold) {
+                        row.classList.add('flagged-residual-row');
+                    }
+                });
+        }
+
+        function openHelpModal() {
+            document.getElementById('help-modal').classList.add('open');
+        }
+
+        function closeHelpModal() {
+            document.getElementById('help-modal').classList.remove('open');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const thresholdInput = document.getElementById('residual-threshold-input');
+            if (thresholdInput) {
+                thresholdInput.addEventListener('input', applyResidualFlags);
+            }
+            applyResidualFlags();
+        });
     </script>
 </body>
 </html>
