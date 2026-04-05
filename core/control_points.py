@@ -129,3 +129,42 @@ def update_control_fixed_flags(control_df: pd.DataFrame, point_ids: list[str], f
     )
 
     return work, errors
+
+
+def apply_anchor_elevation(control_df: pd.DataFrame, point_id: str, elevation_value):
+    work = control_df.copy()
+    errors = []
+
+    point = str(point_id).strip()
+    if not point:
+        return work, ["Please select a point to anchor."]
+
+    try:
+        elevation = float(elevation_value)
+    except (TypeError, ValueError):
+        return work, ["Anchor elevation must be a numeric value."]
+
+    work["PointID"] = work["PointID"].astype(str)
+
+    point_mask = work["PointID"] == point
+    if point_mask.any():
+        work.loc[point_mask, "Elevation"] = elevation
+        work.loc[point_mask, "Fixed"] = "Y"
+    else:
+        work = pd.concat(
+            [
+                work,
+                pd.DataFrame(
+                    [
+                        {
+                            "PointID": point,
+                            "Elevation": elevation,
+                            "Fixed": "Y",
+                        }
+                    ]
+                ),
+            ],
+            ignore_index=True,
+        )
+
+    return work, errors

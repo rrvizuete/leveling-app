@@ -1001,6 +1001,76 @@
                         <button type="submit">Delete Selected Circuits</button>
                     </div>
                     </form>
+
+                    {% if unanchored_circuit_options %}
+                    <div class="inline-message" style="margin-top: 16px;">
+                        <strong>Anchor free-to-free circuits:</strong>
+                        <p>Select a point in each free-to-free circuit and enter a known elevation to calculate elevations for the rest of that circuit.</p>
+                    </div>
+                    <div class="table-wrap anchor-circuit-table-wrap">
+                        <div style="display: none;">
+                            {% for option in unanchored_circuit_options %}
+                            {% set form_id = "anchor-form-" ~ loop.index %}
+                            <form id="{{ form_id }}" method="POST">
+                                <input type="hidden" name="action" value="apply_circuit_anchor">
+                                <input type="hidden" name="active_stage" value="adjustment">
+                                <input type="hidden" name="active_tab" value="{{ active_tab }}">
+                                <input type="hidden" name="active_adjustment_tab" value="circuit_summary">
+                                <input type="hidden" name="adjustment_mode" value="{{ adjustment_mode }}">
+                                <input type="hidden" name="saved_circuits_json" value='{{ saved_circuits_json|safe }}'>
+                                <input type="hidden" name="current_circuit_path_json" value='{{ current_circuit_path|tojson|safe }}'>
+                                <input type="hidden" name="tolerance" value="{{ tolerance }}">
+                                <input type="hidden" name="residual_threshold" value="{{ residual_threshold }}">
+                                <input type="hidden" name="raw_json" value='{{ raw_data|tojson|safe }}'>
+                                <input type="hidden" name="control_json" value='{{ control_data|tojson|safe }}'>
+                                <input type="hidden" name="leg_json" value='{{ leg_data|tojson|safe }}'>
+                                <input type="hidden" name="summary_json" value='{{ summary_data|tojson|safe }}'>
+                                <input type="hidden" name="decision_json" value='{{ decision_data|tojson|safe }}'>
+                                <input type="hidden" name="cleaned_json" value='{{ cleaned_data|tojson|safe }}'>
+                                <input type="hidden" name="anchor_circuit_id" value="{{ option.circuit_id }}">
+                            </form>
+                            {% endfor %}
+                        </div>
+                        <table class="anchor-circuit-table">
+                            <thead>
+                                <tr>
+                                    <th>Circuit</th>
+                                    <th>Anchor Point</th>
+                                    <th>Known Elevation</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for option in unanchored_circuit_options %}
+                                {% set form_id = "anchor-form-" ~ loop.index %}
+                                <tr>
+                                    <td><strong>{{ option.circuit_id }}</strong></td>
+                                    <td>
+                                        <select name="anchor_point_id" form="{{ form_id }}" required>
+                                            {% for point in option.points %}
+                                            <option value="{{ point }}">{{ point }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <input
+                                            type="number"
+                                            name="anchor_elevation"
+                                            form="{{ form_id }}"
+                                            step="0.0001"
+                                            placeholder="Elevation"
+                                            required
+                                        >
+                                    </td>
+                                    <td>
+                                        <button type="submit" form="{{ form_id }}">Apply Anchor</button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
                     {% else %}
                     <p>No saved circuits yet.</p>
                     {% endif %}
