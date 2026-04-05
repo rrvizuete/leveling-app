@@ -6,7 +6,11 @@ import json
 from core.leg_computation import validate_field_data, compute_legs
 from core.repeated_leg_analysis import analyze_repeated_legs
 from core.cleaned_leg_means import build_cleaned_leg_means
-from core.control_points import validate_control_points, update_control_fixed_flags
+from core.control_points import (
+    validate_control_points,
+    update_control_fixed_flags,
+    apply_anchor_elevation,
+)
 from core.network_adjustment import natural_sort_key, run_network_adjustment
 from core.circuit_builder import (
     build_graph_from_cleaned_legs,
@@ -243,6 +247,38 @@ def build_circuits_state_file(saved_circuits: list[dict]):
         download_name="saved_circuits.json",
         mimetype="application/json",
     )
+
+
+def build_unanchored_circuit_options(saved_circuits: list[dict], control_df: pd.DataFrame):
+    if control_df is None or control_df.empty or not saved_circuits:
+        return []
+
+    fixed_points = set(
+        control_df.loc[
+            control_df["Fixed"].astype(str).str.upper() == "Y",
+            "PointID",
+        ].astype(str).tolist()
+    )
+
+    options = []
+    for circuit in saved_circuits:
+        path = [str(point) for point in circuit.get("Path", [])]
+        if len(path) < 2:
+            continue
+
+        circuit_type = classify_circuit_path(path, fixed_points)
+        if circuit_type != "Unanchored":
+            continue
+
+        unique_points = list(dict.fromkeys(path))
+        options.append(
+            {
+                "circuit_id": str(circuit.get("Circuit_ID", "")),
+                "points": unique_points,
+            }
+        )
+
+    return options
 
 
 def parse_exclusion_state_file(uploaded_state_file):
@@ -869,6 +905,83 @@ def index():
                 active_stage = "adjustment"
                 active_adjustment_tab = "circuit_summary"
 
+            elif action == "apply_circuit_anchor":
+                raw_df = parse_json_df(raw_json)
+                control_df = parse_json_df(control_json)
+                leg_df = parse_json_df(leg_json)
+                summary_df = parse_json_df(summary_json)
+                decision_df = parse_json_df(decision_json)
+                cleaned_df = parse_json_df(cleaned_json)
+
+                anchor_circuit_id = request.form.get("anchor_circuit_id", "").strip()
+                anchor_point_id = request.form.get("anchor_point_id", "").strip()
+                anchor_elevation = request.form.get("anchor_elevation", "").strip()
+
+                raw_data = raw_df.to_dict(orient="records")
+                leg_data = leg_df.to_dict(orient="records")
+                summary_data = summary_df.to_dict(orient="records")
+                decision_data = decision_df.to_dict(orient="records")
+                cleaned_data = cleaned_df.to_dict(orient="records")
+
+                selected_circuit = next(
+                    (
+                        circuit for circuit in saved_circuits
+                        if str(circuit.get("Circuit_ID", "")).strip() == anchor_circuit_id
+                    ),
+                    None,
+                )
+
+                if selected_circuit is None:
+                    errors.append("Selected circuit was not found.")
+                else:
+                    selected_path = [str(point) for point in selected_circuit.get("Path", [])]
+                    if anchor_point_id not in selected_path:
+                        errors.append("Selected point is not in the selected circuit.")
+
+                if not errors:
+                    control_df, anchor_errors = apply_anchor_elevation(
+                        control_df,
+                        anchor_point_id,
+                        anchor_elevation,
+                    )
+                    errors.extend(anchor_errors)
+
+                control_data = control_df.to_dict(orient="records")
+
+                (
+                    circuit_summary_df,
+                    circuit_legs_df,
+                    circuit_elevations_df,
+                    circuit_errors,
+                    circuit_warnings,
+                ) = run_circuit_pipeline(saved_circuits, control_df)
+
+                adjustment_messages.extend(circuit_errors)
+                adjustment_messages.extend(circuit_warnings)
+
+                circuit_summary_data = circuit_summary_df.to_dict(orient="records")
+                circuit_legs_data = circuit_legs_df.to_dict(orient="records")
+                circuit_elevations_data = circuit_elevations_df.to_dict(orient="records")
+
+                graph, _usable_cleaned = build_graph_from_cleaned_legs(cleaned_df)
+                available_start_points = get_all_available_points(graph)
+                fixed_points = set(
+                    control_df.loc[
+                        control_df["Fixed"].astype(str).str.upper() == "Y",
+                        "PointID"
+                    ].astype(str).tolist()
+                )
+                current_circuit_candidates = get_next_candidate_points(graph, current_circuit_path)
+                current_circuit_type = classify_circuit_path(current_circuit_path, fixed_points) if len(current_circuit_path) >= 2 else ""
+
+                if not errors:
+                    success_message = (
+                        f"Anchor elevation applied to {anchor_point_id}. Circuit elevations recalculated."
+                    )
+
+                active_stage = "adjustment"
+                active_adjustment_tab = "circuit_summary"
+
             elif action == "apply_exclusions":
                 if not raw_json or not leg_json or not decision_json:
                     errors.append("No analysis data found to apply exclusions.")
@@ -1138,6 +1251,10 @@ def index():
         current_circuit_message=current_circuit_message,
         saved_circuits=saved_circuits,
         saved_circuits_json=json.dumps(saved_circuits),
+        unanchored_circuit_options=build_unanchored_circuit_options(
+            saved_circuits,
+            pd.DataFrame(control_data or []),
+        ),
         unassigned_points=build_unassigned_points(
             available_start_points, current_circuit_path, saved_circuits
         ),

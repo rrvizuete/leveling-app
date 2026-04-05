@@ -267,6 +267,9 @@ def compute_circuit_adjustment(saved_circuits: list[dict], control_df: pd.DataFr
             )
 
         else:
+            warnings.append(
+                f"{circuit_id} is a free-to-free circuit. Provide a known elevation for at least one point in this circuit (set it as Fixed) so elevations can be computed."
+            )
             circuit_summary_rows.append(
                 {
                     "Circuit_ID": circuit_id,
@@ -279,7 +282,7 @@ def compute_circuit_adjustment(saved_circuits: list[dict], control_df: pd.DataFr
                     "Control_Delta_Z": "",
                     "Closure_Error": "",
                     "Correction_Per_Leg": "",
-                    "Status": "Unanchored circuit. Not adjustable.",
+                    "Status": "Unanchored free-to-free circuit. Enter elevation on at least one point to anchor adjustment.",
                 }
             )
 
