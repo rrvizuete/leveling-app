@@ -226,6 +226,27 @@ th {
     margin: 8px 0 0 18px;
 }
 
+.anchor-circuit-table-wrap {
+    margin-top: 10px;
+}
+
+.anchor-circuit-table th,
+.anchor-circuit-table td {
+    vertical-align: middle;
+}
+
+.anchor-circuit-table select,
+.anchor-circuit-table input[type="number"] {
+    width: 100%;
+    min-width: 160px;
+    margin: 0;
+}
+
+.anchor-circuit-table button {
+    width: 100%;
+    min-width: 140px;
+}
+
 .circuit-builder-layout {
     display: grid;
     grid-template-columns: 1fr 1fr 1.1fr;
