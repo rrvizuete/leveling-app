@@ -353,7 +353,6 @@ def _run_component_adjustment(component_points, component_cleaned_df, fixed_poin
 
     A_rows = []
     l_values = []
-    weights = []
     leg_rows = []
 
     for _, row in component_cleaned_df.iterrows():
@@ -374,16 +373,13 @@ def _run_component_adjustment(component_points, component_cleaned_df, fixed_poin
         elif to_point in fixed_points_in_component:
             rhs -= fixed_points_in_component[to_point]
 
-        std_dev = row["Standard_Deviation"]
-        if std_dev == "" or pd.isna(std_dev):
-            weight = 1.0
-        else:
-            std_val = float(std_dev)
-            weight = 1.0 if std_val <= 0 else 1.0 / (std_val ** 2)
+        # Stochastic weighting is intentionally disabled for now.
+        # We solve using an unweighted model (all observations treated equally),
+        # and report each observation with a unit weight.
+        weight = 1.0
 
         A_rows.append(a)
         l_values.append(rhs)
-        weights.append(weight)
 
         leg_rows.append(
             {
@@ -419,10 +415,9 @@ def _run_component_adjustment(component_points, component_cleaned_df, fixed_poin
 
     A = np.array(A_rows, dtype=float)
     l = np.array(l_values, dtype=float).reshape(-1, 1)
-    P = np.diag(weights)
 
-    N = A.T @ P @ A
-    u = A.T @ P @ l
+    N = A.T @ A
+    u = A.T @ l
 
     try:
         x_hat = np.linalg.solve(N, u)
@@ -441,8 +436,8 @@ def _run_component_adjustment(component_points, component_cleaned_df, fixed_poin
 
     dof = len(l_values) - len(unknown_points)
     if dof > 0:
-        vt_p_v = (v.T @ P @ v).item()
-        sigma0_sq = vt_p_v / dof
+        vt_v = (v.T @ v).item()
+        sigma0_sq = vt_v / dof
         covariance = sigma0_sq * np.linalg.inv(N)
         for point, idx in point_index.items():
             point_sigmas[point] = float(np.sqrt(covariance[idx, idx]))
