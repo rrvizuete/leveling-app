@@ -1,4 +1,5 @@
 import pandas as pd
+from core.circuit_builder import build_circuit_legs_df
 
 
 def classify_circuit_from_points(point_ids: list[str], fixed_points: set[str]) -> str:
@@ -15,7 +16,9 @@ def classify_circuit_from_points(point_ids: list[str], fixed_points: set[str]) -
     return "Unanchored"
 
 
-def compute_circuit_adjustment(saved_circuits: list[dict], control_df: pd.DataFrame):
+def compute_circuit_adjustment(
+    saved_circuits: list[dict], cleaned_df: pd.DataFrame, control_df: pd.DataFrame
+):
     errors = []
     warnings = []
 
@@ -48,7 +51,7 @@ def compute_circuit_adjustment(saved_circuits: list[dict], control_df: pd.DataFr
     for circuit in saved_circuits:
         circuit_id = circuit["Circuit_ID"]
         path = [str(p) for p in circuit["Path"]]
-        legs = circuit["Legs"]
+        legs = build_circuit_legs_df(path, cleaned_df).to_dict(orient="records")
 
         if len(path) < 2 or not legs:
             circuit_summary_rows.append(

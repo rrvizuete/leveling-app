@@ -265,7 +265,7 @@
                                 </thead>
                                 <tbody>
                                     {% for row in decision_data %}
-                                    {% set row_key = row.Leg_ID ~ '||' ~ row.Run_ID ~ '||' ~ row.From_Point ~ '||' ~ row.To_Point ~ '||' ~ ('%.4f'|format(row.Normalized_Delta_Z)) %}
+                                    {% set row_key = row.Leg_ID ~ '||' ~ row.Run_ID ~ '||' ~ row.From_Point ~ '||' ~ row.To_Point %}
                                     <tr class="
                                         {% if row.Decision == 'Suspect' %}
                                             suspect-row
@@ -331,7 +331,7 @@
                             <input type="hidden" name="decision_json" value='{{ decision_data|tojson|safe }}'>
                             <input type="hidden" name="cleaned_json" value='{{ cleaned_data|tojson|safe }}'>
                             {% for row in decision_data %}
-                            {% set row_key = row.Leg_ID ~ '||' ~ row.Run_ID ~ '||' ~ row.From_Point ~ '||' ~ row.To_Point ~ '||' ~ ('%.4f'|format(row.Normalized_Delta_Z)) %}
+                            {% set row_key = row.Leg_ID ~ '||' ~ row.Run_ID ~ '||' ~ row.From_Point ~ '||' ~ row.To_Point %}
                             {% if row.User_Excluded %}
                             <input type="hidden" name="exclude_row" value="{{ row_key }}">
                             {% endif %}

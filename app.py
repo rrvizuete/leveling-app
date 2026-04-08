@@ -18,7 +18,6 @@ from core.circuit_builder import (
     get_next_candidate_points,
     auto_extend_circuit,
     classify_circuit_path,
-    build_circuit_legs_df,
 )
 from core.circuit_adjustment import compute_circuit_adjustment
 from core.export_helpers import export_analysis_workbook
@@ -69,7 +68,7 @@ def sort_cleaned_df(cleaned_df: pd.DataFrame) -> pd.DataFrame:
 def make_decision_row_key(row) -> str:
     return (
         f"{row['Leg_ID']}||{row['Run_ID']}||{row['From_Point']}||"
-        f"{row['To_Point']}||{float(row['Normalized_Delta_Z']):.4f}"
+        f"{row['To_Point']}"
     )
 
 
@@ -166,13 +165,26 @@ def parse_json_df(json_text: str) -> pd.DataFrame:
 def parse_saved_circuits(json_text: str):
     if not json_text:
         return []
-    return json.loads(json_text)
+    return normalize_saved_circuits(json.loads(json_text))
 
 
 def renumber_saved_circuits(saved_circuits: list[dict]) -> list[dict]:
     for idx, circuit in enumerate(saved_circuits, start=1):
         circuit["Circuit_ID"] = f"CIR-{idx}"
     return saved_circuits
+
+
+def normalize_saved_circuits(saved_circuits: list[dict]) -> list[dict]:
+    normalized = []
+    for idx, circuit in enumerate(saved_circuits, start=1):
+        path = [str(point) for point in circuit.get("Path", [])]
+        normalized.append(
+            {
+                "Circuit_ID": str(circuit.get("Circuit_ID") or f"CIR-{idx}"),
+                "Path": path,
+            }
+        )
+    return normalized
 
 
 def build_unassigned_points(
@@ -215,8 +227,8 @@ def run_network_pipeline(cleaned_df, control_df):
     return run_network_adjustment(cleaned_df, control_df)
 
 
-def run_circuit_pipeline(saved_circuits, control_df):
-    return compute_circuit_adjustment(saved_circuits, control_df)
+def run_circuit_pipeline(saved_circuits, cleaned_df, control_df):
+    return compute_circuit_adjustment(saved_circuits, cleaned_df, control_df)
 
 
 def build_exclusion_state_file(selected_keys: set[str]):
@@ -237,7 +249,7 @@ def build_exclusion_state_file(selected_keys: set[str]):
 def build_circuits_state_file(saved_circuits: list[dict]):
     output = BytesIO()
     payload = {
-        "saved_circuits": saved_circuits,
+        "saved_circuits": normalize_saved_circuits(saved_circuits),
     }
     output.write(json.dumps(payload, indent=2).encode("utf-8"))
     output.seek(0)
@@ -293,7 +305,16 @@ def parse_exclusion_state_file(uploaded_state_file):
     if not isinstance(excluded_rows, list):
         raise ValueError("State file field 'excluded_rows' must be a list.")
 
-    return {str(value) for value in excluded_rows}
+    normalized_keys = set()
+    for value in excluded_rows:
+        key = str(value)
+        parts = key.split("||")
+        if len(parts) >= 4:
+            normalized_keys.add("||".join(parts[:4]))
+        else:
+            normalized_keys.add(key)
+
+    return normalized_keys
 
 
 def parse_saved_circuits_file(uploaded_state_file):
@@ -308,7 +329,7 @@ def parse_saved_circuits_file(uploaded_state_file):
     if not isinstance(saved_circuits, list):
         raise ValueError("Circuits file field 'saved_circuits' must be a list.")
 
-    return saved_circuits
+    return normalize_saved_circuits(saved_circuits)
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -448,7 +469,7 @@ def index():
                         _circuit_errors,
                         _circuit_warnings,
                     ) = (
-                        run_circuit_pipeline(saved_circuits, control_df)
+                        run_circuit_pipeline(saved_circuits, cleaned_df, control_df)
                         if adjustment_mode == "circuit" and not control_df.empty
                         else (pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), [], [])
                     )
@@ -525,7 +546,7 @@ def index():
                             circuit_elevations_df,
                             circuit_errors,
                             circuit_warnings,
-                        ) = run_circuit_pipeline(saved_circuits, control_df)
+                        ) = run_circuit_pipeline(saved_circuits, cleaned_df, control_df)
 
                         adjustment_messages.extend(circuit_errors)
                         adjustment_messages.extend(circuit_warnings)
@@ -585,7 +606,7 @@ def index():
                     circuit_elevations_df,
                     circuit_errors,
                     circuit_warnings,
-                ) = run_circuit_pipeline(saved_circuits, control_df)
+                ) = run_circuit_pipeline(saved_circuits, cleaned_df, control_df)
 
                 adjustment_messages.extend(circuit_errors)
                 adjustment_messages.extend(circuit_warnings)
@@ -640,7 +661,7 @@ def index():
                     circuit_elevations_df,
                     circuit_errors,
                     circuit_warnings,
-                ) = run_circuit_pipeline(saved_circuits, control_df)
+                ) = run_circuit_pipeline(saved_circuits, cleaned_df, control_df)
 
                 adjustment_messages.extend(circuit_errors)
                 adjustment_messages.extend(circuit_warnings)
@@ -694,7 +715,7 @@ def index():
                     circuit_elevations_df,
                     circuit_errors,
                     circuit_warnings,
-                ) = run_circuit_pipeline(saved_circuits, control_df)
+                ) = run_circuit_pipeline(saved_circuits, cleaned_df, control_df)
 
                 adjustment_messages.extend(circuit_errors)
                 adjustment_messages.extend(circuit_warnings)
@@ -744,7 +765,7 @@ def index():
                     circuit_elevations_df,
                     circuit_errors,
                     circuit_warnings,
-                ) = run_circuit_pipeline(saved_circuits, control_df)
+                ) = run_circuit_pipeline(saved_circuits, cleaned_df, control_df)
 
                 adjustment_messages.extend(circuit_errors)
                 adjustment_messages.extend(circuit_warnings)
@@ -785,7 +806,7 @@ def index():
                     circuit_elevations_df,
                     circuit_errors,
                     circuit_warnings,
-                ) = run_circuit_pipeline(saved_circuits, control_df)
+                ) = run_circuit_pipeline(saved_circuits, cleaned_df, control_df)
 
                 adjustment_messages.extend(circuit_errors)
                 adjustment_messages.extend(circuit_warnings)
@@ -815,23 +836,13 @@ def index():
                 graph, _usable_cleaned = build_graph_from_cleaned_legs(cleaned_df)
                 available_start_points = get_all_available_points(graph)
 
-                fixed_points = set(
-                    control_df.loc[
-                        control_df["Fixed"].astype(str).str.upper() == "Y",
-                        "PointID"
-                    ].astype(str).tolist()
-                )
-
                 if len(current_circuit_path) < 2:
                     current_circuit_message = "Circuit must contain at least two points."
                 else:
-                    legs_df = build_circuit_legs_df(current_circuit_path, cleaned_df)
                     saved_circuits.append(
                         {
                             "Circuit_ID": f"CIR-{len(saved_circuits) + 1}",
                             "Path": current_circuit_path[:],
-                            "Type": classify_circuit_path(current_circuit_path, fixed_points),
-                            "Legs": legs_df.to_dict(orient="records"),
                         }
                     )
                     current_circuit_message = "Circuit saved."
@@ -845,7 +856,7 @@ def index():
                     circuit_elevations_df,
                     circuit_errors,
                     circuit_warnings,
-                ) = run_circuit_pipeline(saved_circuits, control_df)
+                ) = run_circuit_pipeline(saved_circuits, cleaned_df, control_df)
 
                 adjustment_messages.extend(circuit_errors)
                 adjustment_messages.extend(circuit_warnings)
@@ -893,7 +904,7 @@ def index():
                     circuit_elevations_df,
                     circuit_errors,
                     circuit_warnings,
-                ) = run_circuit_pipeline(saved_circuits, control_df)
+                ) = run_circuit_pipeline(saved_circuits, cleaned_df, control_df)
 
                 adjustment_messages.extend(circuit_errors)
                 adjustment_messages.extend(circuit_warnings)
@@ -954,7 +965,7 @@ def index():
                     circuit_elevations_df,
                     circuit_errors,
                     circuit_warnings,
-                ) = run_circuit_pipeline(saved_circuits, control_df)
+                ) = run_circuit_pipeline(saved_circuits, cleaned_df, control_df)
 
                 adjustment_messages.extend(circuit_errors)
                 adjustment_messages.extend(circuit_warnings)
@@ -1031,7 +1042,7 @@ def index():
                                 circuit_elevations_df,
                                 circuit_errors,
                                 circuit_warnings,
-                            ) = run_circuit_pipeline(saved_circuits, control_df)
+                            ) = run_circuit_pipeline(saved_circuits, cleaned_df, control_df)
 
                             adjustment_messages.extend(circuit_errors)
                             adjustment_messages.extend(circuit_warnings)
@@ -1108,7 +1119,7 @@ def index():
                                 circuit_elevations_df,
                                 circuit_errors,
                                 circuit_warnings,
-                            ) = run_circuit_pipeline(saved_circuits, control_df)
+                            ) = run_circuit_pipeline(saved_circuits, cleaned_df, control_df)
 
                             adjustment_messages.extend(circuit_errors)
                             adjustment_messages.extend(circuit_warnings)
@@ -1209,7 +1220,7 @@ def index():
                                             circuit_elevations_df,
                                             circuit_errors,
                                             circuit_warnings,
-                                        ) = run_circuit_pipeline(saved_circuits, control_df)
+                                        ) = run_circuit_pipeline(saved_circuits, cleaned_df, control_df)
 
                                         adjustment_messages.extend(circuit_errors)
                                         adjustment_messages.extend(circuit_warnings)
