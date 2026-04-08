@@ -233,8 +233,22 @@ def run_circuit_pipeline(saved_circuits, cleaned_df, control_df):
 
 def build_exclusion_state_file(selected_keys: set[str]):
     output = BytesIO()
+    excluded_observations = []
+    for key in sorted(selected_keys):
+        parts = str(key).split("||")
+        if len(parts) < 4:
+            continue
+        excluded_observations.append(
+            {
+                "leg_id": parts[0],
+                "run_id": parts[1],
+                "from_point": parts[2],
+                "to_point": parts[3],
+            }
+        )
+
     payload = {
-        "excluded_rows": sorted(selected_keys),
+        "excluded_observations": excluded_observations,
     }
     output.write(json.dumps(payload, indent=2).encode("utf-8"))
     output.seek(0)
@@ -301,18 +315,35 @@ def parse_exclusion_state_file(uploaded_state_file):
     if not isinstance(payload, dict):
         raise ValueError("State file is not a JSON object.")
 
-    excluded_rows = payload.get("excluded_rows", [])
-    if not isinstance(excluded_rows, list):
-        raise ValueError("State file field 'excluded_rows' must be a list.")
-
     normalized_keys = set()
-    for value in excluded_rows:
-        key = str(value)
-        parts = key.split("||")
-        if len(parts) >= 4:
-            normalized_keys.add("||".join(parts[:4]))
-        else:
-            normalized_keys.add(key)
+
+    excluded_observations = payload.get("excluded_observations")
+    if excluded_observations is not None:
+        if not isinstance(excluded_observations, list):
+            raise ValueError("State file field 'excluded_observations' must be a list.")
+
+        for row in excluded_observations:
+            if not isinstance(row, dict):
+                continue
+            leg_id = str(row.get("leg_id", ""))
+            run_id = str(row.get("run_id", ""))
+            from_point = str(row.get("from_point", ""))
+            to_point = str(row.get("to_point", ""))
+            if leg_id and run_id and from_point and to_point:
+                normalized_keys.add(f"{leg_id}||{run_id}||{from_point}||{to_point}")
+    else:
+        # Backward compatibility with older exclusion state files.
+        excluded_rows = payload.get("excluded_rows", [])
+        if not isinstance(excluded_rows, list):
+            raise ValueError("State file field 'excluded_rows' must be a list.")
+
+        for value in excluded_rows:
+            key = str(value)
+            parts = key.split("||")
+            if len(parts) >= 4:
+                normalized_keys.add("||".join(parts[:4]))
+            else:
+                normalized_keys.add(key)
 
     return normalized_keys
 
