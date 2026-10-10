@@ -212,69 +212,69 @@
           alignment &ndash; even where the girders are straight, and the screed line follows it.</li>
         <li>The <span class="ui">Overhang grade</span> selector sets how the deck runs across the extension:
           <ul>
-            <li><strong>Carry the cross slope</strong> (default) &ndash; the deck continues at its own cross slope, taken
-              from the last 2 ft of the model, perpendicular to the deck edge.</li>
-            <li><strong>Level from the edge of deck</strong> &ndash; the overhang is held flat at the edge-of-deck
-              elevation, out to the screed line.</li>
+            <li><strong>Carry the cross slope</strong> (default) &ndash; the deflected deck continues at the deck's
+              cross slope, taken from the last 2 ft of the model, perpendicular to the deck edge.</li>
+            <li><strong>Level from the edge of deck</strong> &ndash; the overhang is held flat at the
+              <em>deflected</em> edge-of-deck elevation, out to the screed line.</li>
           </ul>
           Changing it after <span class="ui">Compute deck</span> recomputes straight away.</li>
         <li>The <strong>edge of deck is a break line</strong>. The overhang grade starts exactly there and is never
-          blended back into the deck model: the deck keeps its DTM elevations up to the edge, and only the overhang
-          takes the chosen grade. In the surface export no triangle crosses the edge, and the edge is also written as a
+          blended back into the deck: the deflected deck follows the DTM (plus deflection) up to the edge, and only
+          the overhang takes the chosen grade. In the surface export no triangle crosses the edge, and the edge is also written as a
           LandXML break line.</li>
-        <li>The exterior girder's deflection is held across the whole overhang, because the overhang cantilevers from
-          it.</li>
+        <li>The overhang belongs to the <strong>deflected deck</strong>: it starts at the deflected edge-of-deck
+          elevation, and the exterior girder's deflection is held across the whole overhang, because the overhang
+          cantilevers from it. The <code>OH</code> points and the surface export give deflected elevations.</li>
         <li>Leave the offset blank for no extension.</li>
       </ul>
 
       <figure class="manual-figure">
-        <svg viewBox="0 0 900 290" role="img" aria-label="Cross-section of the overhang: the deck model ends at the edge of deck, a break line, and is carried at its cross slope (or held level) out to the screed line, one overhang offset beyond it.">
+        <svg viewBox="0 0 900 290" role="img" aria-label="Cross-section of the overhang: the deflected deck ends at the edge of deck, a break line, and is either carried at the cross slope or held level out to the screed line, one overhang offset beyond it.">
           <!-- girders -->
           <g fill="#c7d0dc" stroke="#8a97a8" stroke-width="1.5">
-            <path d="M150 150 h60 v10 h-22 v90 h22 v10 h-60 v-10 h22 v-90 h-22 z" />
-            <path d="M390 144 h60 v10 h-22 v96 h22 v10 h-60 v-10 h22 v-96 h-22 z" />
+            <path d="M220 138 h60 v10 h-22 v102 h22 v10 h-60 v-10 h22 v-102 h-22 z" />
+            <path d="M450 102 h60 v10 h-22 v140 h22 v10 h-60 v-10 h22 v-140 h-22 z" />
           </g>
           <!-- deck slab (model) -->
-          <path d="M540 118 L90 136 L90 150 L540 132 Z" fill="#dbe4ee" stroke="none" />
-          <line x1="540" y1="118" x2="90" y2="136" stroke="var(--m-original)" stroke-width="3" />
-          <!-- extension carried at cross slope -->
-          <line x1="90" y1="136" x2="30" y2="141" stroke="var(--m-original)" stroke-width="3" stroke-dasharray="8 6" />
-          <!-- level option -->
-          <line x1="90" y1="136" x2="30" y2="136" stroke="#6b7a8f" stroke-width="2" stroke-dasharray="2 4" />
-          <!-- deflected surface -->
-          <line x1="540" y1="104" x2="90" y2="122" stroke="var(--m-deflected)" stroke-width="2.5" />
-          <line x1="90" y1="122" x2="30" y2="127" stroke="var(--m-deflected)" stroke-width="2.5" stroke-dasharray="8 6" />
-          <!-- edge of deck -->
-          <line x1="90" y1="60" x2="90" y2="175" stroke="#172033" stroke-width="1.5" stroke-dasharray="3 4" />
-          <text class="figure-label" x="96" y="72">Edge of deck</text>
-          <text class="figure-note" x="96" y="88">(end of DTM, break line)</text>
-          <!-- break points at the edge of deck -->
-          <circle cx="90" cy="136" r="4" fill="#172033" />
-          <circle cx="90" cy="122" r="4" fill="#172033" />
+          <path d="M560 76 L170 136 L170 150 L560 90 Z" fill="#dbe4ee" stroke="none" />
+          <line x1="560" y1="76" x2="170" y2="136" stroke="var(--m-original)" stroke-width="3" />
+          <!-- deflected deck -->
+          <line x1="560" y1="62" x2="170" y2="122" stroke="var(--m-deflected)" stroke-width="2.5" />
+          <!-- overhang of the deflected deck: carried at the cross slope (default) -->
+          <line x1="170" y1="122" x2="30" y2="143.5" stroke="var(--m-deflected)" stroke-width="2.5" stroke-dasharray="9 6" />
+          <!-- overhang of the deflected deck: level (option) -->
+          <line x1="170" y1="122" x2="30" y2="122" stroke="var(--m-deflected)" stroke-width="2.5" stroke-dasharray="2 5" stroke-linecap="round" />
+          <!-- edge of deck (break line) -->
+          <line x1="170" y1="60" x2="170" y2="175" stroke="#172033" stroke-width="1.5" stroke-dasharray="3 4" />
+          <circle cx="170" cy="122" r="4.5" fill="#172033" />
+          <text class="figure-label" x="176" y="66">Edge of deck</text>
+          <text class="figure-note" x="176" y="82">(end of DTM, break line)</text>
           <!-- screed -->
           <line x1="30" y1="60" x2="30" y2="175" stroke="var(--m-screed)" stroke-width="2" />
-          <rect x="22" y="115" width="16" height="10" fill="var(--m-screed)" />
+          <circle cx="30" cy="122" r="4.5" fill="var(--m-screed)" />
+          <circle cx="30" cy="143.5" r="4.5" fill="var(--m-screed)" />
           <text class="figure-label" x="12" y="50" fill="var(--m-screed)">Screed (OH points)</text>
+          <text class="figure-note" x="38" y="114">Level</text>
+          <text class="figure-note" x="38" y="164">Cross slope</text>
           <!-- offset dimension -->
-          <line x1="30" y1="200" x2="90" y2="200" stroke="#172033" stroke-width="1.2" marker-start="url(#arrow)" marker-end="url(#arrow)" />
-          <text class="figure-label" x="20" y="222">Overhang offset</text>
-          <!-- girder centerline distance -->
-          <line x1="180" y1="100" x2="180" y2="270" stroke="#8a97a8" stroke-dasharray="6 4" />
-          <text class="figure-note" x="186" y="285">Exterior girder &#8452;</text>
-          <!-- cross slope -->
-          <text class="figure-note" x="236" y="178">Deck model (DTM)</text>
-          <text class="figure-note" x="300" y="98" fill="var(--m-deflected)">Deflected deck = DTM + deflection</text>
+          <line x1="30" y1="200" x2="170" y2="200" stroke="#172033" stroke-width="1.2" marker-start="url(#arrow)" marker-end="url(#arrow)" />
+          <text class="figure-label" x="52" y="222">Overhang offset</text>
+          <!-- girder centerline -->
+          <line x1="250" y1="100" x2="250" y2="270" stroke="#8a97a8" stroke-dasharray="6 4" />
+          <text class="figure-note" x="256" y="285">Exterior girder &#8452;</text>
+          <text class="figure-note" x="300" y="184">Deck model (DTM)</text>
+          <text class="figure-note" x="330" y="90" fill="var(--m-deflected)" transform="rotate(-8.75 330 90)">Deflected deck = DTM + deflection</text>
           <!-- legend -->
-          <g transform="translate(610 70)">
+          <g transform="translate(600 70)">
             <line x1="0" y1="0" x2="34" y2="0" stroke="var(--m-original)" stroke-width="3" />
             <text class="figure-note" x="44" y="4">Original deck (DTM)</text>
             <line x1="0" y1="26" x2="34" y2="26" stroke="var(--m-deflected)" stroke-width="2.5" />
             <text class="figure-note" x="44" y="30">Deflected deck</text>
-            <line x1="0" y1="52" x2="34" y2="52" stroke="#6b7a8f" stroke-width="2.5" stroke-dasharray="8 6" />
-            <text class="figure-note" x="44" y="56">Carried at the deck cross slope (default)</text>
-            <line x1="0" y1="78" x2="34" y2="78" stroke="#6b7a8f" stroke-width="2" stroke-dasharray="2 4" />
-            <text class="figure-note" x="44" y="82">Level from the edge of deck (option)</text>
-            <circle cx="17" cy="104" r="4" fill="#172033" />
+            <line x1="0" y1="52" x2="34" y2="52" stroke="var(--m-deflected)" stroke-width="2.5" stroke-dasharray="9 6" />
+            <text class="figure-note" x="44" y="56">Overhang at the cross slope (default)</text>
+            <line x1="0" y1="78" x2="34" y2="78" stroke="var(--m-deflected)" stroke-width="2.5" stroke-dasharray="2 5" stroke-linecap="round" />
+            <text class="figure-note" x="44" y="82">Overhang level (option)</text>
+            <circle cx="17" cy="104" r="4.5" fill="#172033" />
             <text class="figure-note" x="44" y="108">Break line (edge of deck)</text>
             <line x1="0" y1="130" x2="34" y2="130" stroke="var(--m-screed)" stroke-width="2" />
             <text class="figure-note" x="44" y="134">Screed line</text>
@@ -285,7 +285,8 @@
             </marker>
           </defs>
         </svg>
-        <figcaption>Figure 1 &ndash; Section at the exterior girder. Deflection and slopes are exaggerated for clarity.</figcaption>
+        <figcaption>Figure 1 &ndash; Section at the exterior girder. Both overhang options start from the deflected
+          deck at the edge of deck. Deflection, cross slope and overhang width are exaggerated for clarity.</figcaption>
       </figure>
 
       <div class="callout">
@@ -443,11 +444,13 @@ t = 1/2 (midspan, required), 1/4 and 1/3 (optional)</code>
       <p>The overhang holds the exterior girder's deflection. Beyond the span ends the deflection is zero.</p>
 
       <h3>Overhang extension</h3>
-      <code class="formula">Z(screed) = Z(edge of deck) + s &middot; offset
+      <code class="formula">Deflected Z(screed) = Deflected Z(edge of deck) + s &middot; offset
+Deflected Z(edge of deck) = DTM Z(edge of deck) + exterior girder deflection
 s = cross slope over the last 2 ft of the deck model, perpendicular to the deck edge   (Carry the cross slope)
 s = 0                                                                                  (Level from the edge of deck)</code>
-      <p>The edge of deck is a break line: Z(edge of deck) is the DTM elevation there, and the grade changes from the
-        deck's to the overhang's at that line only.</p>
+      <p>The overhang is part of the deflected deck: it starts at the deflected edge-of-deck elevation and keeps the
+        exterior girder's deflection. The edge of deck is a break line, so the grade changes from the deck's to the
+        overhang's at that line only.</p>
 
       <h3>Deflected surface export</h3>
       <p>
