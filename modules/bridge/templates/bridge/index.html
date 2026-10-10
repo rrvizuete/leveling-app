@@ -132,11 +132,20 @@
                     min="0"
                     step="0.01"
                     placeholder="None"
-                    title="Overhang offset: distance beyond the edge of deck (the DTM edge) to where elevations are needed, e.g. the screed, measured perpendicular to the deck edge. The deck is carried out at its cross slope. Blank means no extension."
+                    title="Overhang offset: distance beyond the edge of deck (the DTM edge) to where elevations are needed, e.g. the screed, measured perpendicular to the deck edge. Blank means no extension."
                   />
                 </div>
                 <button id="computeDeckBtn" class="btn btn-primary btn-sm sidebar-row-action" type="button">Compute deck</button>
               </div>
+              <label for="overhangSlopeSelect" class="form-label mt-2">Overhang grade</label>
+              <select
+                id="overhangSlopeSelect"
+                class="form-select form-select-sm"
+                title="How the deck runs past the edge of deck: carried out at its cross slope, or held level at the edge-of-deck elevation. The edge of deck is a break line either way."
+              >
+                <option value="slope" selected>Carry the cross slope</option>
+                <option value="level">Level from the edge of deck</option>
+              </select>
             </div>
 
             <div class="sidebar-group">
@@ -195,7 +204,7 @@
                   id="exportSurfaceBtn"
                   class="btn btn-outline-primary btn-sm"
                   type="button"
-                  title="Export Deflected Deck Surface: LandXML TIN of the deflected top of deck, extended to the overhang offset for laying out the screed."
+                  title="Export Deflected Deck Surface: LandXML TIN of the deflected top of deck, extended to the overhang offset for laying out the screed, with the edge of deck as a break line."
                 >
                   Surface (XML)
                 </button>
