@@ -77,6 +77,8 @@ const PLOTLY_CONFIG = {
   responsive: true,
   displaylogo: false,
   displayModeBar: true,
+  // Mouse wheel zooms in and out about the cursor.
+  scrollZoom: true,
   modeBarButtonsToRemove: ["zoom2d", "select2d", "lasso2d", "autoScale2d"],
   modeBarButtonsToAdd: [ZOOM_WINDOW_BUTTON, ZOOM_EXTENTS_BUTTON],
 };
@@ -128,6 +130,55 @@ function enableZoomWindow(gd) {
     if (y1 > y0) zoom["yaxis.range"] = [y0, y1];
     Plotly.update(gd, { selectedpoints: null }, zoom);
   });
+}
+
+/**
+ * Pressing the mouse wheel and dragging pans the chart, whatever tool is
+ * active. Plotly has no middle-button drag, so the drag is caught on the chart
+ * element before Plotly's own drag layer sees it. Plotly.newPlot keeps DOM
+ * listeners on the chart element, so this binds only once.
+ */
+function enableWheelPan(gd) {
+  if (gd.dataset.wheelPan) return;
+  gd.dataset.wheelPan = "true";
+  gd.addEventListener(
+    "mousedown",
+    (event) => {
+      const xa = gd._fullLayout?.xaxis;
+      const ya = gd._fullLayout?.yaxis;
+      if (event.button !== 1 || !xa?._length || !ya?._length) return;
+      // Keep Plotly from starting a drag and the browser from auto-scrolling.
+      event.preventDefault();
+      event.stopPropagation();
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const xRange = xa.range.map(Number);
+      const yRange = ya.range.map(Number);
+      const xPerPx = (xRange[1] - xRange[0]) / xa._length;
+      const yPerPx = (yRange[1] - yRange[0]) / ya._length;
+      let frame = 0;
+      const onMove = (moveEvent) => {
+        // Screen y grows downward, data y upward.
+        const dx = (moveEvent.clientX - startX) * xPerPx;
+        const dy = (moveEvent.clientY - startY) * yPerPx;
+        cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(() =>
+          Plotly.relayout(gd, {
+            "xaxis.range": [xRange[0] - dx, xRange[1] - dx],
+            "yaxis.range": [yRange[0] + dy, yRange[1] + dy],
+          }),
+        );
+      };
+      const onUp = (upEvent) => {
+        if (upEvent.button !== 1) return;
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+    true,
+  );
 }
 
 const state = {
@@ -372,6 +423,27 @@ function readWorkbook(file) {
   });
 }
 
+// Every template column is required except the last (centerline radius): the
+// optional quarter and third span deflections sit mid-sheet, so their columns
+// must be there even when left blank.
+const MIN_SOURCE_COLUMNS = TEMPLATE_HEADERS.length - 1;
+
+/**
+ * Throws when the sheet stops short of the required columns, naming the
+ * missing ones. A row ends at its last filled cell, so the sheet's width is
+ * its widest row.
+ */
+function checkSourceColumns(rows) {
+  const columnCount = rows.reduce((widest, row) => Math.max(widest, row?.length ?? 0), 0);
+  if (columnCount >= MIN_SOURCE_COLUMNS) return;
+  const missing = TEMPLATE_HEADERS.slice(columnCount, MIN_SOURCE_COLUMNS);
+  throw new Error(
+    `The girder data sheet has ${columnCount} column${columnCount === 1 ? "" : "s"}, ` +
+      `but at least ${MIN_SOURCE_COLUMNS} are required. Missing: ${missing.join(", ")}. ` +
+      "Download the template to see the expected layout.",
+  );
+}
+
 function normalizeRow(row) {
   const result = Array.from({ length: TEMPLATE_HEADERS.length }, (_, i) => row?.[i] ?? "");
   return result;
@@ -419,7 +491,9 @@ async function loadSourceRows() {
 
   const workbook = await readWorkbook(file);
   const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-  state.sourceRows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }).slice(1).map(normalizeRow);
+  const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+  checkSourceColumns(rows);
+  state.sourceRows = rows.slice(1).map(normalizeRow);
   ui.uploadStatus.textContent = "Spreadsheet uploaded correctly. You can edit values in the grid before calculation.";
   renderSourceGrid();
 }
@@ -643,6 +717,7 @@ function renderProfileChart() {
     PLOTLY_CONFIG,
   );
   enableZoomWindow(ui.profileChart);
+  enableWheelPan(ui.profileChart);
 }
 
 // Target size (px) of a plan-view grid cell on screen.
@@ -761,6 +836,7 @@ function renderPlanChart() {
     PLOTLY_CONFIG,
   );
   enableZoomWindow(ui.planChart);
+  enableWheelPan(ui.planChart);
   enableSquareGrid(ui.planChart);
   bindChartClick(ui.planChart, onPlanChartClick);
 }
@@ -2071,6 +2147,7 @@ function renderDeflectedDeckChart() {
     PLOTLY_CONFIG,
   );
   enableZoomWindow(ui.deckChart);
+  enableWheelPan(ui.deckChart);
   enableSquareGrid(ui.deckChart);
   bindChartClick(ui.deckChart, onDeckChartClick);
 }
@@ -2631,6 +2708,7 @@ function renderSectionChart() {
     PLOTLY_CONFIG,
   );
   enableZoomWindow(ui.sectionChart);
+  enableWheelPan(ui.sectionChart);
   showSectionExaggeration();
   ui.sectionChart.on("plotly_relayout", showSectionExaggeration);
   ui.sectionChart.on("plotly_update", showSectionExaggeration); // zoom window
@@ -3024,6 +3102,7 @@ ui.fileInput.addEventListener("change", async () => {
     state.sourceRows = [];
     renderSourceGrid();
     ui.uploadStatus.textContent = `Error loading spreadsheet: ${error.message}`;
+    window.alert(`Error loading spreadsheet: ${error.message}`);
   }
 });
 
