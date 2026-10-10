@@ -423,6 +423,27 @@ function readWorkbook(file) {
   });
 }
 
+// Every template column is required except the last (centerline radius): the
+// optional quarter and third span deflections sit mid-sheet, so their columns
+// must be there even when left blank.
+const MIN_SOURCE_COLUMNS = TEMPLATE_HEADERS.length - 1;
+
+/**
+ * Throws when the sheet stops short of the required columns, naming the
+ * missing ones. A row ends at its last filled cell, so the sheet's width is
+ * its widest row.
+ */
+function checkSourceColumns(rows) {
+  const columnCount = rows.reduce((widest, row) => Math.max(widest, row?.length ?? 0), 0);
+  if (columnCount >= MIN_SOURCE_COLUMNS) return;
+  const missing = TEMPLATE_HEADERS.slice(columnCount, MIN_SOURCE_COLUMNS);
+  throw new Error(
+    `The girder data sheet has ${columnCount} column${columnCount === 1 ? "" : "s"}, ` +
+      `but at least ${MIN_SOURCE_COLUMNS} are required. Missing: ${missing.join(", ")}. ` +
+      "Download the template to see the expected layout.",
+  );
+}
+
 function normalizeRow(row) {
   const result = Array.from({ length: TEMPLATE_HEADERS.length }, (_, i) => row?.[i] ?? "");
   return result;
@@ -470,7 +491,9 @@ async function loadSourceRows() {
 
   const workbook = await readWorkbook(file);
   const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-  state.sourceRows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }).slice(1).map(normalizeRow);
+  const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+  checkSourceColumns(rows);
+  state.sourceRows = rows.slice(1).map(normalizeRow);
   ui.uploadStatus.textContent = "Spreadsheet uploaded correctly. You can edit values in the grid before calculation.";
   renderSourceGrid();
 }
@@ -3079,6 +3102,7 @@ ui.fileInput.addEventListener("change", async () => {
     state.sourceRows = [];
     renderSourceGrid();
     ui.uploadStatus.textContent = `Error loading spreadsheet: ${error.message}`;
+    window.alert(`Error loading spreadsheet: ${error.message}`);
   }
 });
 
