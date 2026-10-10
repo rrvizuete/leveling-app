@@ -12,8 +12,11 @@
   // result is a conforming TIN.
   //
   // With an overhang offset, a strip is then added along the deck's side
-  // edges, out to the screed line, carrying the deck's cross slope and the
-  // deflection there.
+  // edges, out to the screed line, carrying the deck's cross slope (or held
+  // level) and the deflection there. The edge of deck is a break line: the
+  // strip is hung from the deck's own edge vertices, so no triangle spans it,
+  // and it is also written as LandXML breaklines for software that rebuilds
+  // the TIN.
 
   const MERGE_TOLERANCE = 1e-6;
   const MERGE_CELL = 1e-4;
@@ -139,11 +142,13 @@
    *   fascias              exterior girder lines [{fascia, outward}], to find the deck side edges
    *   deckZ(e, n)          undeflected deck elevation, for the cross slope
    *   crossSlopeRun        ft of deck, inward from the edge, that sets the cross slope
+   *   overhangSlope        "slope" (default) carries the cross slope out; "level" holds the edge elevation
    */
   function buildDeflectedSurface(input) {
     const { points, faces, isopachAt, cellSize, fascias, deckZ } = input;
     const overhangOffset = input.overhangOffset;
     const crossSlopeRun = input.crossSlopeRun ?? 2;
+    const overhangSlope = input.overhangSlope === "level" ? "level" : "slope";
     const store = vertexStore();
     const out = [];
 
@@ -226,8 +231,13 @@
     const deckFaces = out.length;
     let stripFaces = 0;
     let sideEdges = 0;
+    let breaklines = [];
     if (overhangOffset !== null && overhangOffset !== undefined && overhangOffset > 0) {
-      ({ added: stripFaces, sideEdges } = addScreedStrip(store, out, { overhangOffset, fascias, deckZ, crossSlopeRun }));
+      ({
+        added: stripFaces,
+        sideEdges,
+        breaklines,
+      } = addScreedStrip(store, out, { overhangOffset, fascias, deckZ, crossSlopeRun, overhangSlope }));
     }
 
     // Consistent counter-clockwise faces.
@@ -236,33 +246,37 @@
       .filter(([p, q, r]) => p !== q && q !== r && p !== r)
       .map(([p, q, r]) => (signedArea(vertices[p], vertices[q], vertices[r]) < 0 ? [p, r, q] : [p, q, r]));
 
-    return { vertices, faces: faceList, deckFaces, stripFaces, sideEdges };
+    return { vertices, faces: faceList, deckFaces, stripFaces, sideEdges, breaklines };
   }
 
   /**
    * Adds the strip from the deck's side edges out to the screed line, which
    * lies `overhangOffset` beyond the deck edge, perpendicular to it. Returns
-   * the number of faces added.
+   * the number of faces added and the deck-edge break lines (vertex index
+   * chains).
    */
   function addScreedStrip(store, out, options) {
-    const { overhangOffset, fascias, deckZ, crossSlopeRun } = options;
+    const { overhangOffset, fascias, deckZ, crossSlopeRun, overhangSlope } = options;
     const vertices = store.vertices;
     const sides = deckSideEdges(tinBoundary(vertices, out), fascias);
 
     // Cross slope at each side-edge vertex, over the last `crossSlopeRun` ft of
     // deck. At a deck corner that run can land on the end edge, where the DTM
     // gives no elevation; take the slope from a neighbour along the edge then.
+    // A level overhang has no slope to read.
     const slopes = new Map();
-    sides.vertexNormals.forEach((normal, index) => {
-      const v = vertices[index];
-      const inner = deckZ(v.e - normal.e * crossSlopeRun, v.n - normal.n * crossSlopeRun);
-      if (inner !== null) slopes.set(index, (v.deckZ - inner) / crossSlopeRun);
-    });
-    for (let pass = 0; pass < 3; pass += 1) {
-      sides.edges.forEach((edge) => {
-        if (!slopes.has(edge.ia) && slopes.has(edge.ib)) slopes.set(edge.ia, slopes.get(edge.ib));
-        if (!slopes.has(edge.ib) && slopes.has(edge.ia)) slopes.set(edge.ib, slopes.get(edge.ia));
+    if (overhangSlope !== "level") {
+      sides.vertexNormals.forEach((normal, index) => {
+        const v = vertices[index];
+        const inner = deckZ(v.e - normal.e * crossSlopeRun, v.n - normal.n * crossSlopeRun);
+        if (inner !== null) slopes.set(index, (v.deckZ - inner) / crossSlopeRun);
       });
+      for (let pass = 0; pass < 3; pass += 1) {
+        sides.edges.forEach((edge) => {
+          if (!slopes.has(edge.ia) && slopes.has(edge.ib)) slopes.set(edge.ia, slopes.get(edge.ib));
+          if (!slopes.has(edge.ib) && slopes.has(edge.ia)) slopes.set(edge.ib, slopes.get(edge.ia));
+        });
+      }
     }
 
     // One screed point per side-edge vertex, straight out from the deck edge.
@@ -294,7 +308,45 @@
       out.push([edge.ia, edge.ib, sv], [edge.ia, sv, su]);
       added += 2;
     });
-    return { added, sideEdges: sides.edges.length };
+    return { added, sideEdges: sides.edges.length, breaklines: added ? chainEdges(sides.edges) : [] };
+  }
+
+  /** Joins edges ({ia, ib}) that share vertices into polylines of vertex indices. */
+  function chainEdges(edges) {
+    const adjacency = new Map();
+    const link = (from, to, k) => {
+      if (!adjacency.has(from)) adjacency.set(from, []);
+      adjacency.get(from).push({ to, k });
+    };
+    edges.forEach((edge, k) => {
+      link(edge.ia, edge.ib, k);
+      link(edge.ib, edge.ia, k);
+    });
+
+    const used = new Set();
+    const walk = (start) => {
+      const line = [start];
+      let current = start;
+      for (;;) {
+        const step = adjacency.get(current).find((s) => !used.has(s.k));
+        if (!step) break;
+        used.add(step.k);
+        current = step.to;
+        line.push(current);
+      }
+      return line;
+    };
+
+    const lines = [];
+    // Open chains start at their ends (or at junctions); what is left is closed loops.
+    adjacency.forEach((steps, index) => {
+      if (steps.length === 2) return;
+      while (steps.some((s) => !used.has(s.k))) lines.push(walk(index));
+    });
+    edges.forEach((edge, k) => {
+      if (!used.has(k)) lines.push(walk(edge.ia));
+    });
+    return lines.filter((line) => line.length >= 2);
   }
 
   // ---------------------------------------------------------------------------
@@ -473,9 +525,30 @@
       '\t<Application name="Survey Toolbox" desc="Bridge Superstructure - deflected top of deck" manufacturer="Survey Toolbox"></Application>',
       "\t<Surfaces>",
       `\t\t<Surface name="${name}" desc="${desc}">`,
+    ];
+    // Break lines (e.g. the edge of deck) as 3D polylines on the TIN's own
+    // vertices, so a program that rebuilds the TIN keeps the grade break.
+    const breaklines = surface.breaklines ?? [];
+    if (breaklines.length) {
+      const breaklineName = escapeXml(options.breaklineName || "Edge of deck");
+      lines.push("\t\t\t<SourceData>", "\t\t\t\t<Breaklines>");
+      breaklines.forEach((line, index) => {
+        const coords = line
+          .map((i) => surface.vertices[i])
+          .map((v) => `${v.n.toFixed(6)} ${v.e.toFixed(6)} ${v.z.toFixed(6)}`)
+          .join(" ");
+        lines.push(
+          `\t\t\t\t\t<Breakline name="${breaklineName} ${index + 1}" brkType="standard">`,
+          `\t\t\t\t\t\t<PntList3D>${coords}</PntList3D>`,
+          "\t\t\t\t\t</Breakline>",
+        );
+      });
+      lines.push("\t\t\t\t</Breaklines>", "\t\t\t</SourceData>");
+    }
+    lines.push(
       `\t\t\t<Definition surfType="TIN" elevMax="${maxZ.toFixed(6)}" elevMin="${minZ.toFixed(6)}">`,
       "\t\t\t\t<Pnts>",
-    ];
+    );
     surface.vertices.forEach((v, index) => {
       lines.push(`\t\t\t\t\t<P id="${index + 1}">${v.n.toFixed(6)} ${v.e.toFixed(6)} ${v.z.toFixed(6)}</P>`);
     });

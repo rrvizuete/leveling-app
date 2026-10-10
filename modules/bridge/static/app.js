@@ -184,6 +184,7 @@ const ui = {
   contourIntervalInput: document.getElementById("contourIntervalInput"),
   contourStatus: document.getElementById("contourStatus"),
   overhangInput: document.getElementById("overhangInput"),
+  overhangSlopeSelect: document.getElementById("overhangSlopeSelect"),
   alignmentFileInput: document.getElementById("alignmentFileInput"),
   alignmentUploadStatus: document.getElementById("alignmentUploadStatus"),
   alignmentSelect: document.getElementById("alignmentSelect"),
@@ -855,6 +856,25 @@ function readOverhangOffset() {
   return value > 0 ? value : null;
 }
 
+/**
+ * How the deck runs past the edge of deck: "slope" carries its cross slope out
+ * (the default), "level" holds the edge-of-deck elevation. Either way the edge
+ * of deck is a break line.
+ */
+function readOverhangSlope() {
+  return ui.overhangSlopeSelect?.value === "level" ? "level" : "slope";
+}
+
+/** How the overhang grade reads in the log, notes and export descriptions. */
+function describeOverhangSlope(overhangSlope) {
+  return overhangSlope === "level" ? "held level from the edge of deck" : "carried at its cross slope";
+}
+
+/** Short chart label for the computed deck's extension past the DTM. */
+function extensionLabel() {
+  return state.deflectedDeck?.overhangSlope === "level" ? "held level" : "carried at cross slope";
+}
+
 // How much of the deck, inward from the DTM edge, sets the cross slope that
 // is carried out to the overhang (screed) line.
 const CROSS_SLOPE_RUN = 2;
@@ -876,10 +896,11 @@ function deckSidesFor(fascias) {
 
 /**
  * Deck elevation at a deck-edge point and the cross slope carried out from it
- * (over the last CROSS_SLOPE_RUN ft of the model, perpendicular to the edge).
- * `z(d)` gives the deck elevation `d` ft beyond the edge.
+ * (over the last CROSS_SLOPE_RUN ft of the model, perpendicular to the edge),
+ * or a zero slope when the overhang is held level. `z(d)` gives the deck
+ * elevation `d` ft beyond the edge.
  */
-function deckEdgeProfile(tin, edgePoint) {
+function deckEdgeProfile(tin, edgePoint, overhangSlope = "slope") {
   const nudge = 1e-4; // read just inside the edge, where the TIN is certain to answer
   // At a deck corner, straight inward runs along the end edge, where the TIN
   // has no answer; step a hair along the edge (either way) to stay on the deck.
@@ -896,6 +917,7 @@ function deckEdgeProfile(tin, edgePoint) {
   };
   const edgeZ = inward(nudge);
   if (edgeZ === null) return null;
+  if (overhangSlope === "level") return { slope: 0, z: () => edgeZ };
   const backZ = inward(CROSS_SLOPE_RUN);
   const slope = backZ === null ? 0 : (edgeZ - backZ) / (CROSS_SLOPE_RUN - nudge);
   return { slope, z: (d) => edgeZ + slope * (d + nudge) };
@@ -905,10 +927,13 @@ function deckEdgeProfile(tin, edgePoint) {
  * Deck elevations out to the overhang (screed) line. Inside the DTM this is
  * the TIN elevation. Between the deck edge and the screed line -- the
  * overhang offset beyond the edge, perpendicular to it -- the last
- * CROSS_SLOPE_RUN ft of deck is carried out at its own cross slope, so a
- * surveyor gets prorated elevations where the screed sits beyond the model.
+ * CROSS_SLOPE_RUN ft of deck is carried out at its own cross slope (or, with
+ * `overhangSlope` "level", the edge elevation is held), so a surveyor gets
+ * prorated elevations where the screed sits beyond the model. The edge of
+ * deck is a break line: the overhang grade starts there and never blends
+ * back into the model.
  */
-function buildDeckSurface(tin, mesh, overhangOffset) {
+function buildDeckSurface(tin, mesh, overhangOffset, overhangSlope = "slope") {
   const sides = overhangOffset !== null && mesh && tin ? deckSidesFor(mesh.overhangEdges) : null;
   const active = Boolean(sides?.edges.length);
 
@@ -932,6 +957,7 @@ function buildDeckSurface(tin, mesh, overhangOffset) {
 
   return {
     extends: active,
+    overhangSlope,
     sides,
     /** True where the deck exists only because of the overhang extension. */
     inOverhangBand(e, n) {
@@ -954,7 +980,7 @@ function buildDeckSurface(tin, mesh, overhangOffset) {
       if (!active) return null;
       const hit = locate(e, n);
       if (!hit) return null;
-      const profile = deckEdgeProfile(tin, hit.edge);
+      const profile = deckEdgeProfile(tin, hit.edge, overhangSlope);
       if (!profile) return null;
       return {
         z: profile.z(hit.along),
@@ -1039,6 +1065,7 @@ function computeDeflectedDeck() {
     window.alert(error.message);
     return false;
   }
+  const overhangSlope = readOverhangSlope();
 
   // The overhang offset is measured perpendicular to the edge of deck (where
   // the DTM ends), which may curve while the girders are straight. For each
@@ -1084,7 +1111,8 @@ function computeDeflectedDeck() {
   } else {
     logLine(
       `Isopach: overhang edge set ${overhangOffset.toFixed(3)} ft beyond the edge of deck (DTM edge), ` +
-        "measured perpendicular to the deck edge.",
+        `measured perpendicular to the deck edge; the deck is ${describeOverhangSlope(overhangSlope)} ` +
+        "(the edge of deck is a break line).",
     );
     edgeRanges.forEach((range) => {
       logLine(
@@ -1178,8 +1206,9 @@ function computeDeflectedDeck() {
   });
 
   // Screed points: the overhang edge at every girder interval, with the deck
-  // carried out at its cross slope and the fascia girder's deflection added.
-  const deckSurface = buildDeckSurface(tin, mesh, overhangOffset);
+  // carried out at its cross slope (or held level) and the fascia girder's
+  // deflection added.
+  const deckSurface = buildDeckSurface(tin, mesh, overhangOffset, overhangSlope);
   const edgePoints = [];
   let extendedEdgePoints = 0;
   if (deckSurface.extends) {
@@ -1192,7 +1221,7 @@ function computeDeflectedDeck() {
         // Carry the deck out from the deck-edge point this screed point was
         // placed from; without one (no deck edge found) fall back to sampling.
         const deckEdge = deckEdges?.[interval];
-        const edgeProfile = deckEdge ? deckEdgeProfile(tin, deckEdge) : null;
+        const edgeProfile = deckEdge ? deckEdgeProfile(tin, deckEdge, overhangSlope) : null;
         const deck = edgeProfile
           ? { z: edgeProfile.z(overhangOffset), extended: true, crossSlope: edgeProfile.slope }
           : deckSurface.sample(point.e, point.n);
@@ -1218,14 +1247,17 @@ function computeDeflectedDeck() {
   }
 
   state.isopachMesh = mesh;
-  state.deflectedDeck = { points, inside, girderPoints, overhangOffset, deckSurface, edgePoints };
+  state.deflectedDeck = { points, inside, girderPoints, overhangOffset, overhangSlope, deckSurface, edgePoints };
   state.planRevision += 1;
 
   if (deckSurface.extends) {
     const expected = mesh.overhangEdges.reduce((total, edge) => total + edge.points.length, 0);
     logLine(
       `Overhang: ${edgePoints.length} of ${expected} screed points sampled, ${extendedEdgePoints} of them past the ` +
-        `DTM edge (deck carried out at its cross slope over the last ${CROSS_SLOPE_RUN} ft of the model).`,
+        "DTM edge (deck " +
+        (overhangSlope === "level"
+          ? "held level at the edge-of-deck elevation)."
+          : `carried out at its cross slope over the last ${CROSS_SLOPE_RUN} ft of the model).`),
     );
     if (edgePoints.length < expected) {
       logLine(
@@ -1929,7 +1961,7 @@ function renderDeflectedDeckChart() {
         point.originalZ,
         point.isopach,
         point.deflectedZ,
-        point.extended ? "carried at cross slope" : "from DTM",
+        point.extended ? extensionLabel() : "from DTM",
       ]),
       hovertemplate:
         "<b>%{customdata[0]}</b> (overhang edge)<br>N %{y:.3f}<br>E %{x:.3f}<br>" +
@@ -2421,8 +2453,8 @@ function renderSectionChart() {
   const x = section.profile.map((point) => point.offset);
   const profile = section.profile;
   // Split each surface into the part read from the DTM (solid) and the part
-  // carried out at the cross slope to the screed line (dashed). The dashed
-  // part repeats its neighbouring DTM sample so the two lines join.
+  // carried out to the screed line (dashed), at the cross slope or level. The
+  // dashed part repeats its neighbouring DTM sample so the two lines join.
   const touchesExtended = (i) => profile[i - 1]?.extended || profile[i + 1]?.extended;
   const modelPart = (value) => profile.map((point) => (point.extended ? null : value(point)));
   const extendedPart = (value) =>
@@ -2447,7 +2479,7 @@ function renderSectionChart() {
       y: extendedPart((point) => point.originalZ),
       mode: "lines",
       line: { width: 2.5, color: "#1b5ba3", dash: "dash" },
-      name: "Original, carried at cross slope",
+      name: `Original, ${extensionLabel()}`,
       legendgroup: "original",
       hovertemplate: "%{y:.3f} ft<extra>Original (extended)</extra>",
     });
@@ -2471,7 +2503,7 @@ function renderSectionChart() {
         customdata: deflectionIn,
         mode: "lines",
         line: { width: 2.5, color: "#dc3545", dash: "dash" },
-        name: "Deflected, carried at cross slope",
+        name: `Deflected, ${extensionLabel()}`,
         legendgroup: "deflected",
         hovertemplate: "%{y:.3f} ft (deflection %{customdata:.3f} in)<extra>Deflected (extended)</extra>",
       });
@@ -2519,7 +2551,7 @@ function renderSectionChart() {
         item.girder,
         item.originalZ,
         item.isopach === null ? 0 : item.isopach * 12,
-        item.extended ? "carried at cross slope" : "from DTM",
+        item.extended ? extensionLabel() : "from DTM",
       ]),
       hovertemplate:
         "<b>Overhang edge (Span %{customdata[0]}, Girder %{customdata[1]})</b><br>Offset %{x:.3f} ft<br>" +
@@ -2866,9 +2898,11 @@ function exportTopOfDeckDeflected() {
             `${formatSpan(span)}${formatGirder(point.girder)}${formatInterval(point.interval)}OH`,
             point.originalZ,
             point.isopach,
-            point.extended
-              ? `Overhang edge; deck carried at ${(point.crossSlope * 100).toFixed(2)}% cross slope past the DTM`
-              : "Overhang edge; deck from DTM",
+            !point.extended
+              ? "Overhang edge; deck from DTM"
+              : state.deflectedDeck.overhangSlope === "level"
+                ? "Overhang edge; deck held level from the edge of deck past the DTM"
+                : `Overhang edge; deck carried at ${(point.crossSlope * 100).toFixed(2)}% cross slope past the DTM`,
           ]);
         });
     });
@@ -2923,7 +2957,7 @@ function exportDeflectedSurfaceXml() {
 
   const mesh = state.isopachMesh;
   const tin = state.dtmTin;
-  const overhangOffset = state.deflectedDeck.overhangOffset;
+  const { overhangOffset, overhangSlope } = state.deflectedDeck;
   const surface = BridgeSurfaceExport.buildDeflectedSurface({
     points: state.dtm.points,
     faces: state.dtm.faces,
@@ -2931,6 +2965,7 @@ function exportDeflectedSurfaceXml() {
     deckZ: (e, n) => tin.sample(e, n),
     cellSize: SURFACE_CELL_SIZE,
     overhangOffset,
+    overhangSlope,
     // The exterior girders, so the deck's side edges can be found locally.
     fascias: mesh.overhangEdges,
     crossSlopeRun: CROSS_SLOPE_RUN,
@@ -2940,7 +2975,8 @@ function exportDeflectedSurfaceXml() {
   const description =
     overhangOffset === null
       ? "Top of deck plus girder deflection"
-      : `Top of deck plus girder deflection, extended ${overhangOffset} ft beyond the edge of deck at its cross slope`;
+      : `Top of deck plus girder deflection, extended ${overhangOffset} ft beyond the edge of deck, ` +
+        `${describeOverhangSlope(overhangSlope)}; the edge of deck is a break line`;
   const xml = BridgeSurfaceExport.toLandXml(surface, { name, description, unitsXml: state.dtmUnitsXml });
 
   const url = URL.createObjectURL(new Blob([xml], { type: "application/xml" }));
@@ -2950,6 +2986,12 @@ function exportDeflectedSurfaceXml() {
       `${surface.faces.length} faces (deck densified on a ${SURFACE_CELL_SIZE} ft grid` +
       (surface.stripFaces ? `, plus ${surface.stripFaces} faces out to the overhang edge).` : ")."),
   );
+  if (surface.breaklines.length) {
+    logLine(
+      `Export: the edge of deck is written as ${surface.breaklines.length} break line(s); the overhang grade ` +
+        "starts there.",
+    );
+  }
   if (overhangOffset !== null && !surface.stripFaces) {
     logLine("Export WARNING: no deck side edges were found to extend, so the surface stops at the DTM edge.");
   }
@@ -3005,6 +3047,13 @@ if (ui.overhangInput) {
   // A new overhang only reshapes the isopach edges, so recompute straight
   // away when a deck is already showing.
   ui.overhangInput.addEventListener("change", () => {
+    if (state.deflectedDeck) computeDeflectedDeck();
+  });
+}
+
+if (ui.overhangSlopeSelect) {
+  // Same for the overhang grade, which only changes the extension.
+  ui.overhangSlopeSelect.addEventListener("change", () => {
     if (state.deflectedDeck) computeDeflectedDeck();
   });
 }
