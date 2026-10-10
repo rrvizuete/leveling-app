@@ -77,6 +77,8 @@ const PLOTLY_CONFIG = {
   responsive: true,
   displaylogo: false,
   displayModeBar: true,
+  // Mouse wheel zooms in and out about the cursor.
+  scrollZoom: true,
   modeBarButtonsToRemove: ["zoom2d", "select2d", "lasso2d", "autoScale2d"],
   modeBarButtonsToAdd: [ZOOM_WINDOW_BUTTON, ZOOM_EXTENTS_BUTTON],
 };
@@ -128,6 +130,55 @@ function enableZoomWindow(gd) {
     if (y1 > y0) zoom["yaxis.range"] = [y0, y1];
     Plotly.update(gd, { selectedpoints: null }, zoom);
   });
+}
+
+/**
+ * Pressing the mouse wheel and dragging pans the chart, whatever tool is
+ * active. Plotly has no middle-button drag, so the drag is caught on the chart
+ * element before Plotly's own drag layer sees it. Plotly.newPlot keeps DOM
+ * listeners on the chart element, so this binds only once.
+ */
+function enableWheelPan(gd) {
+  if (gd.dataset.wheelPan) return;
+  gd.dataset.wheelPan = "true";
+  gd.addEventListener(
+    "mousedown",
+    (event) => {
+      const xa = gd._fullLayout?.xaxis;
+      const ya = gd._fullLayout?.yaxis;
+      if (event.button !== 1 || !xa?._length || !ya?._length) return;
+      // Keep Plotly from starting a drag and the browser from auto-scrolling.
+      event.preventDefault();
+      event.stopPropagation();
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const xRange = xa.range.map(Number);
+      const yRange = ya.range.map(Number);
+      const xPerPx = (xRange[1] - xRange[0]) / xa._length;
+      const yPerPx = (yRange[1] - yRange[0]) / ya._length;
+      let frame = 0;
+      const onMove = (moveEvent) => {
+        // Screen y grows downward, data y upward.
+        const dx = (moveEvent.clientX - startX) * xPerPx;
+        const dy = (moveEvent.clientY - startY) * yPerPx;
+        cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(() =>
+          Plotly.relayout(gd, {
+            "xaxis.range": [xRange[0] - dx, xRange[1] - dx],
+            "yaxis.range": [yRange[0] + dy, yRange[1] + dy],
+          }),
+        );
+      };
+      const onUp = (upEvent) => {
+        if (upEvent.button !== 1) return;
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+    true,
+  );
 }
 
 const state = {
@@ -643,6 +694,7 @@ function renderProfileChart() {
     PLOTLY_CONFIG,
   );
   enableZoomWindow(ui.profileChart);
+  enableWheelPan(ui.profileChart);
 }
 
 // Target size (px) of a plan-view grid cell on screen.
@@ -761,6 +813,7 @@ function renderPlanChart() {
     PLOTLY_CONFIG,
   );
   enableZoomWindow(ui.planChart);
+  enableWheelPan(ui.planChart);
   enableSquareGrid(ui.planChart);
   bindChartClick(ui.planChart, onPlanChartClick);
 }
@@ -2071,6 +2124,7 @@ function renderDeflectedDeckChart() {
     PLOTLY_CONFIG,
   );
   enableZoomWindow(ui.deckChart);
+  enableWheelPan(ui.deckChart);
   enableSquareGrid(ui.deckChart);
   bindChartClick(ui.deckChart, onDeckChartClick);
 }
@@ -2631,6 +2685,7 @@ function renderSectionChart() {
     PLOTLY_CONFIG,
   );
   enableZoomWindow(ui.sectionChart);
+  enableWheelPan(ui.sectionChart);
   showSectionExaggeration();
   ui.sectionChart.on("plotly_relayout", showSectionExaggeration);
   ui.sectionChart.on("plotly_update", showSectionExaggeration); // zoom window
